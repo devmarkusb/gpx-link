@@ -1,12 +1,23 @@
 [project]
-name = "py-app-template"
+name = "gpx-link"
 version = "1.0.0"
-description = "A general-purpose Python project template"
+description = "View GPX waypoints on OpenStreetMap and open locations in Google Maps"
 requires-python = ">=3.10"
 authors = [
     { name = "Your Name", email = "your@email.com" },
 ]
-dependencies = []
+dependencies = [
+    "gpxpy>=1.6.2",
+]
+
+[project.optional-dependencies]
+gui = [
+    "PySide6>=6.6.0",
+]
+
+[project.scripts]
+gpx-link = "gpx_link.cli:main"
+gpx-link-gui = "gpx_link.gui.app:main"
 
 [build-system]
 requires = ["uv_build>=0.11.8,<0.12.0"]
@@ -33,13 +44,13 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
-    "--cov=py_app_template",
+    "--cov=gpx_link",
     "--cov-report=term-missing",
     "--cov-report=xml",
 ]
 
 [tool.coverage.run]
-source = ["py_app_template"]
+source = ["gpx_link"]
 
 [tool.coverage.report]
 show_missing = true
