@@ -1,0 +1,46 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Test / coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
+# Type checking cache
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local AI/editor tooling
+.claude/
+.codex/
+.cursor/
+.github/copilot-instructions.md
+
+# Generated GSD/Copilot payload
+.github/agents/
+.github/skills/
+.github/get-shit-done/
+.github/gsd-file-manifest.json
+
+# OS
+.DS_Store
+Thumbs.db
+*~
+
+# Coverage XML
+coverage.xml
