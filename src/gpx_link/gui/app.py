@@ -12,7 +12,7 @@ def main(argv: list[str] | None = None) -> int:
     paths = [Path(a).expanduser().resolve() for a in path_args]
 
     try:
-        from PySide6.QtCore import QUrl
+        from PySide6.QtCore import QSettings, QUrl
         from PySide6.QtWebEngineWidgets import QWebEngineView
         from PySide6.QtWidgets import (
             QApplication,
@@ -32,10 +32,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
+    _SETTINGS_ORG = "GPX-Link"
+    _SETTINGS_APP = "GPXLink"
+    _LAST_OPEN_DIR_KEY = "last_open_gpx_directory"
+
     class MainWindow(QMainWindow):
         def __init__(self, initial_paths: list[Path]) -> None:
             super().__init__()
             self.setWindowTitle("GPX Link")
+            self._settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
             self._paths: list[Path] = list(initial_paths)
             self._web = QWebEngineView()
             central = QWidget()
@@ -50,15 +55,27 @@ def main(argv: list[str] | None = None) -> int:
 
             self._reload()
 
+        def _saved_open_directory(self) -> str:
+            v = self._settings.value(_LAST_OPEN_DIR_KEY, "")
+            return v if isinstance(v, str) else ""
+
+        def _save_last_directory(self, path_or_file: Path) -> None:
+            p = path_or_file.expanduser().resolve()
+            self._settings.setValue(
+                _LAST_OPEN_DIR_KEY, str(p.parent if p.is_file() else p)
+            )
+
         def _open_files(self) -> None:
             files, _ = QFileDialog.getOpenFileNames(
                 self,
                 "Open GPX files",
-                "",
+                self._saved_open_directory(),
                 "GPX files (*.gpx *.GPX);;All files (*)",
             )
             if files:
-                self._paths = [Path(f).expanduser().resolve() for f in files]
+                resolved = [Path(f).expanduser().resolve() for f in files]
+                self._paths = resolved
+                self._save_last_directory(resolved[0])
                 self._reload()
 
         def _reload(self) -> None:
@@ -79,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
                 QMessageBox.information(self, "GPX", msg)
             html = build_leaflet_html(wpts, geopaths)
             self._web.setHtml(html, QUrl("https://cdn.jsdelivr.net/"))
+            if self._paths:
+                self._save_last_directory(self._paths[0])
 
     # Do not pass GPX paths as Qt arguments; only the real process argv.
     app = QApplication(sys.argv)

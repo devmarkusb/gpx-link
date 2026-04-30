@@ -13,6 +13,8 @@ def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
         Waypoint(Path("/b.gpx"), "B", 46.0, -123.0),
     ]
     html = build_leaflet_html(wpts)
+    assert "function escHtml" in html
+    assert "L.Util.escapeHTML" not in html
     assert "tile.openstreetmap.org" in html
     assert "leaflet" in html.lower()
     assert "45.5" in html and "-122.5" in html

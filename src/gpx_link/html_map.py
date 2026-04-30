@@ -66,6 +66,13 @@ def build_leaflet_html(
   <div id="map"></div>
   <script src="{_LEAFLET_JS}"></script>
   <script>
+    function escHtml(text) {{
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }}
     const markers = {markers_json};
     const paths = {paths_json};
     const fitBounds = {fit};
@@ -85,7 +92,7 @@ def build_leaflet_html(
     }}
     for (const m of markers) {{
       const marker = L.marker([m.lat, m.lon]).addTo(map);
-      marker.bindTooltip(L.Util.escapeHTML(m.name), {{ sticky: true }});
+      marker.bindTooltip(escHtml(m.name), {{ sticky: true }});
       marker.on('click', function () {{
         window.open(m.gmaps, '_blank', 'noopener,noreferrer');
       }});
@@ -104,9 +111,9 @@ def build_leaflet_html(
               fillOpacity: 0.55,
             }}).addTo(map);
       const tip =
-        L.Util.escapeHTML(p.name) +
+        escHtml(p.name) +
         '<br /><span style=\"opacity:.75;font-size:.85em;\">' +
-        L.Util.escapeHTML(p.kind) +
+        escHtml(p.kind) +
         '</span>';
       layer.bindTooltip(tip, {{ sticky: true }});
     }}
