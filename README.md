@@ -1,6 +1,6 @@
 # gpx-link
 
-View **GPX waypoints** on an **OpenStreetMap** basemap (Leaflet), **zoomed to fit** all points from one or more files. Tracks and routes in the GPX are drawn as lines; waypoint markers remain clickable links to **Google Maps** (exact coordinates so the pin matches the GPX data; you can explore nearby places there or start navigation).
+View **GPX waypoints** on an **OpenStreetMap** basemap (Leaflet), **zoomed to fit** all points from one or more files. Tracks and routes are drawn as paths (**polylines**; a single-point segment appears as a small circle marker). **Waypoint marker clicks** open **Google Maps** in a new tab or your default browser; how the link is built depends on the waypoint name (see **Behavior and URLs**).
 
 The project keeps a **small, tested core library** and **CLI** separate from the **optional Qt desktop GUI**.
 
@@ -56,7 +56,7 @@ If **`gpx-link`** is **not found**, the **`bin`** (or Scripts) folder for that e
 Inside the repository, **[uv](https://docs.astral.sh/uv/)** is the smoothest workflow: **`uv sync`** creates or updates **`.venv`**, installs the package in editable form, and pulls **dev** dependencies from **`pyproject.toml`**.
 
 ```bash
-git clone <your-fork-or-upstream-url> gpx-link
+git clone https://github.com/devmarkusb/gpx-link.git gpx-link
 cd gpx-link
 uv sync
 ```
@@ -95,7 +95,7 @@ Contribution workflow (hooks, commits, pytest): **[CONTRIBUTING.md](CONTRIBUTING
 ## Command line
 
 ```bash
-# One JSON object per waypoint (source path, name, lat/lon, elevation, description)
+# One JSON object per waypoint (source, name, latitude, longitude, elevation_m, description)
 gpx-link list track1.gpx track2.gpx
 
 # Standalone HTML map on stdout (save and open in a browser)
@@ -113,7 +113,7 @@ gpx-link-gui
 gpx-link-gui ./routes/*.gpx
 ```
 
-Use **Open GPX…** to load or replace files. The window embeds the same map HTML as the CLI generator.
+Use **Open GPX…** to add GPX files to a sidebar list; check or uncheck files to control what is combined on the map. The map pane embeds the same HTML as the CLI `html` command. Initial paths from the command line are added the same way.
 
 If **`gpx-link-gui`** is missing or **`ImportError`** appears, install the **`gui`** extra (`pip install 'gpx-link[gui]'` or `uv sync --extra gui` on a checkout) and ensure **Qt WebEngine** is supported on your platform.
 
