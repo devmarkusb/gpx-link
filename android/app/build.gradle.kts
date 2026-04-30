@@ -14,8 +14,9 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        // Chaquopy Python 3.12 ships native libs only for arm64-v8a and x86_64.
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 
@@ -47,11 +48,9 @@ android {
 
 chaquopy {
     defaultConfig {
-        python {
-            version("3.12")
-            pip {
-                install("gpxpy>=1.6.2")
-            }
+        version = "3.12"
+        pip {
+            install("gpxpy>=1.6.2")
         }
     }
 }
@@ -60,7 +59,7 @@ tasks.register<Copy>("syncGpxLinkPython") {
     val repoRoot = rootProject.projectDir.resolve("..").normalize()
     from(repoRoot.resolve("src/gpx_link"))
     into(layout.projectDirectory.dir("src/main/python/gpx_link"))
-    duplicatesStrategy = DuplicatesStrategy.OVERWRITE
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
 tasks.named("preBuild").configure { dependsOn("syncGpxLinkPython") }
