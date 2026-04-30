@@ -26,7 +26,7 @@ def build_leaflet_html(
                 "lon": w.longitude,
                 "name": w.name,
                 "source": str(w.source_path),
-                "gmaps": google_maps_url(w.latitude, w.longitude),
+                "gmaps": google_maps_url(w.latitude, w.longitude, name=w.name),
             }
         )
     markers_json = json.dumps(markers)

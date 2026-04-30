@@ -121,7 +121,7 @@ If **`gpx-link-gui`** is missing or **`ImportError`** appears, install the **`gu
 
 - **Map**: OpenStreetMap tiles via Leaflet (`html_map.build_leaflet_html`).
 - **Fit**: Bounds are computed from waypoints and track/route points, then padded so the view is not flush against the edges.
-- **Google Maps**: Each waypoint gets a coordinate-based Maps URL (`maps_urls.google_maps_url`). That opens the place at the GPX position; using the waypoint name alone for search would often pick the wrong POI, so the link is **lat/lng–first**.
+- **Google Maps**: Named waypoints use a search URL centered on the GPX coordinates (`/maps/search/{name}/@{lat},{lng},17z`) so Maps can match the nearby POI. Empty or generic names (`Waypoint`) still use a coordinate-only Maps URL API link for an exact pin.
 
 ## Project layout
 
