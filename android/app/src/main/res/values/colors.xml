@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="md_theme_primary">#2563EB</color>
+    <color name="md_theme_primary_container">#DBEAFE</color>
+    <color name="md_theme_on_primary">#FFFFFF</color>
+</resources>
