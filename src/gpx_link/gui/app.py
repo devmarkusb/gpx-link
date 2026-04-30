@@ -13,6 +13,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         from PySide6.QtCore import QSettings, QUrl
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest
         from PySide6.QtWebEngineWidgets import QWebEngineView
         from PySide6.QtWidgets import (
             QApplication,
@@ -48,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
             layout.setContentsMargins(0, 0, 0, 0)
             layout.addWidget(self._web)
             self.setCentralWidget(central)
+            self._web.page().newWindowRequested.connect(self._on_new_window_requested)
 
             tb = QToolBar()
             tb.addAction("Open GPX…", self._open_files)
@@ -77,6 +80,13 @@ def main(argv: list[str] | None = None) -> int:
                 self._paths = resolved
                 self._save_last_directory(resolved[0])
                 self._reload()
+
+        def _on_new_window_requested(self, request: QWebEngineNewWindowRequest) -> None:
+            # Qt WebEngine does not spawn a real browser window for window.open();
+            # open http(s) links in the system default browser (e.g. Google Maps).
+            url = request.requestedUrl()
+            if url.isValid() and url.scheme() in ("http", "https"):
+                QDesktopServices.openUrl(url)
 
         def _reload(self) -> None:
             if not self._paths:
