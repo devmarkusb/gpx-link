@@ -12,15 +12,18 @@ def main(argv: list[str] | None = None) -> int:
     paths = [Path(a).expanduser().resolve() for a in path_args]
 
     try:
-        from PySide6.QtCore import QSettings, QUrl
+        from PySide6.QtCore import QSettings, Qt, QUrl
         from PySide6.QtGui import QDesktopServices
         from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest
         from PySide6.QtWebEngineWidgets import QWebEngineView
         from PySide6.QtWidgets import (
             QApplication,
             QFileDialog,
+            QListWidget,
+            QListWidgetItem,
             QMainWindow,
             QMessageBox,
+            QSplitter,
             QToolBar,
             QVBoxLayout,
             QWidget,
@@ -43,12 +46,21 @@ def main(argv: list[str] | None = None) -> int:
             super().__init__()
             self.setWindowTitle("GPX Link")
             self._settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
-            self._paths: list[Path] = list(initial_paths)
             self._web = QWebEngineView()
+            self._file_list = QListWidget()
+            self._file_list.setMinimumWidth(220)
+            self._file_list.itemChanged.connect(self._on_file_item_changed)
+
+            splitter = QSplitter()
+            splitter.addWidget(self._file_list)
+            splitter.addWidget(self._web)
+            splitter.setStretchFactor(0, 0)
+            splitter.setStretchFactor(1, 1)
+
             central = QWidget()
             layout = QVBoxLayout(central)
             layout.setContentsMargins(0, 0, 0, 0)
-            layout.addWidget(self._web)
+            layout.addWidget(splitter)
             self.setCentralWidget(central)
             self._web.page().newWindowRequested.connect(self._on_new_window_requested)
 
@@ -56,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
             tb.addAction("Open GPX…", self._open_files)
             self.addToolBar(tb)
 
+            self._add_paths_to_list(initial_paths)
             self._reload()
 
         def _saved_open_directory(self) -> str:
@@ -68,6 +81,52 @@ def main(argv: list[str] | None = None) -> int:
                 _LAST_OPEN_DIR_KEY, str(p.parent if p.is_file() else p)
             )
 
+        def _paths_in_list(self) -> set[str]:
+            seen: set[str] = set()
+            for i in range(self._file_list.count()):
+                item = self._file_list.item(i)
+                data = item.data(Qt.ItemDataRole.UserRole)
+                if isinstance(data, str):
+                    seen.add(data)
+            return seen
+
+        def _add_paths_to_list(self, paths: list[Path]) -> None:
+            self._file_list.blockSignals(True)
+            try:
+                existing = self._paths_in_list()
+                for p in paths:
+                    resolved = p.expanduser().resolve()
+                    key = str(resolved)
+                    if key in existing:
+                        continue
+                    existing.add(key)
+                    it = QListWidgetItem(resolved.name)
+                    it.setData(Qt.ItemDataRole.UserRole, key)
+                    it.setFlags(
+                        it.flags()
+                        | Qt.ItemFlag.ItemIsUserCheckable
+                        | Qt.ItemFlag.ItemIsEnabled
+                    )
+                    it.setCheckState(Qt.CheckState.Checked)
+                    it.setToolTip(key)
+                    self._file_list.addItem(it)
+            finally:
+                self._file_list.blockSignals(False)
+
+        def _checked_paths(self) -> list[Path]:
+            out: list[Path] = []
+            for i in range(self._file_list.count()):
+                item = self._file_list.item(i)
+                if item.checkState() != Qt.CheckState.Checked:
+                    continue
+                data = item.data(Qt.ItemDataRole.UserRole)
+                if isinstance(data, str):
+                    out.append(Path(data))
+            return out
+
+        def _on_file_item_changed(self, _item: QListWidgetItem) -> None:
+            self._reload()
+
         def _open_files(self) -> None:
             files, _ = QFileDialog.getOpenFileNames(
                 self,
@@ -77,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             if files:
                 resolved = [Path(f).expanduser().resolve() for f in files]
-                self._paths = resolved
+                self._add_paths_to_list(resolved)
                 self._save_last_directory(resolved[0])
                 self._reload()
 
@@ -89,12 +148,13 @@ def main(argv: list[str] | None = None) -> int:
                 QDesktopServices.openUrl(url)
 
         def _reload(self) -> None:
-            if not self._paths:
+            paths = self._checked_paths()
+            if not paths:
                 html = build_leaflet_html([])
                 self._web.setHtml(html, QUrl("https://cdn.jsdelivr.net/"))
                 return
             try:
-                wpts, geopaths = load_map_features_from_paths(self._paths)
+                wpts, geopaths = load_map_features_from_paths(paths)
             except OSError as e:
                 QMessageBox.warning(self, "GPX", str(e))
                 return
@@ -106,8 +166,7 @@ def main(argv: list[str] | None = None) -> int:
                 QMessageBox.information(self, "GPX", msg)
             html = build_leaflet_html(wpts, geopaths)
             self._web.setHtml(html, QUrl("https://cdn.jsdelivr.net/"))
-            if self._paths:
-                self._save_last_directory(self._paths[0])
+            self._save_last_directory(paths[0])
 
     # Do not pass GPX paths as Qt arguments; only the real process argv.
     app = QApplication(sys.argv)
