@@ -64,6 +64,12 @@ tasks.register<Copy>("syncGpxLinkPython") {
 
 tasks.named("preBuild").configure { dependsOn("syncGpxLinkPython") }
 
+afterEvaluate {
+    listOf("mergeDebugPythonSources", "mergeReleasePythonSources").forEach { taskName ->
+        tasks.named(taskName).configure { dependsOn("syncGpxLinkPython") }
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")

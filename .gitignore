@@ -44,3 +44,9 @@ Thumbs.db
 
 # Coverage XML
 coverage.xml
+
+# Misc
+/android/local.properties
+
+# Chaquopy: synced copy of src/gpx_link (see syncGpxLinkPython in android/app/build.gradle.kts)
+/android/app/src/main/python/gpx_link/
