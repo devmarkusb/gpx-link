@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import json
 
-from gpx_link.bounds import Bounds, bounds_for_waypoints
+from gpx_link.bounds import Bounds, bounds_for_map
 from gpx_link.maps_urls import google_maps_url
-from gpx_link.models import Waypoint
+from gpx_link.models import GeoPath, Waypoint
 
 _LEAFLET_CSS = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
 _LEAFLET_JS = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
 
 
-def build_leaflet_html(waypoints: list[Waypoint]) -> str:
-    """Return standalone HTML with Leaflet OSM and waypoint markers."""
-    bounds = bounds_for_waypoints(waypoints)
+def build_leaflet_html(
+    waypoints: list[Waypoint],
+    paths: list[GeoPath] | None = None,
+) -> str:
+    """Standalone HTML with Leaflet OSM, waypoint markers, and track/route paths."""
+    geopaths = paths or []
+    bounds = bounds_for_map(waypoints, geopaths)
     padded: Bounds | None = bounds.padded() if bounds else None
     markers: list[dict[str, object]] = []
     for w in waypoints:
@@ -26,6 +30,17 @@ def build_leaflet_html(waypoints: list[Waypoint]) -> str:
             }
         )
     markers_json = json.dumps(markers)
+    line_features: list[dict[str, object]] = []
+    for p in geopaths:
+        line_features.append(
+            {
+                "name": p.name,
+                "kind": p.kind,
+                "source": str(p.source_path),
+                "coords": [[lat, lon] for lat, lon in p.points],
+            }
+        )
+    paths_json = json.dumps(line_features)
     if padded:
         fit = json.dumps(
             [
@@ -52,7 +67,12 @@ def build_leaflet_html(waypoints: list[Waypoint]) -> str:
   <script src="{_LEAFLET_JS}"></script>
   <script>
     const markers = {markers_json};
+    const paths = {paths_json};
     const fitBounds = {fit};
+    const pathStyle = {{
+      track: {{ color: '#2563eb', weight: 4, opacity: 0.85 }},
+      route: {{ color: '#16a34a', weight: 4, opacity: 0.85 }},
+    }};
     const map = L.map('map');
     L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
       maxZoom: 19,
@@ -69,6 +89,26 @@ def build_leaflet_html(waypoints: list[Waypoint]) -> str:
       marker.on('click', function () {{
         window.open(m.gmaps, '_blank', 'noopener,noreferrer');
       }});
+    }}
+    for (const p of paths) {{
+      const style = pathStyle[p.kind] || pathStyle.track;
+      const coords = p.coords;
+      const layer =
+        coords.length >= 2
+          ? L.polyline(coords, style).addTo(map)
+          : L.circleMarker(coords[0], {{
+              radius: 6,
+              color: style.color,
+              weight: 2,
+              fillColor: style.color,
+              fillOpacity: 0.55,
+            }}).addTo(map);
+      const tip =
+        L.Util.escapeHTML(p.name) +
+        '<br /><span style=\"opacity:.75;font-size:.85em;\">' +
+        L.Util.escapeHTML(p.kind) +
+        '</span>';
+      layer.bindTooltip(tip, {{ sticky: true }});
     }}
   </script>
 </body>

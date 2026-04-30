@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from gpx_link.html_map import build_leaflet_html
-from gpx_link.parser import load_waypoints_from_paths
+from gpx_link.parser import load_map_features_from_paths
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,17 +67,17 @@ def main(argv: list[str] | None = None) -> int:
                 self._web.setHtml(html, QUrl("https://cdn.jsdelivr.net/"))
                 return
             try:
-                wpts = load_waypoints_from_paths(self._paths)
+                wpts, geopaths = load_map_features_from_paths(self._paths)
             except OSError as e:
                 QMessageBox.warning(self, "GPX", str(e))
                 return
-            if not wpts:
-                QMessageBox.information(
-                    self,
-                    "GPX",
-                    "No waypoints found in the selected file(s).",
+            if not wpts and not geopaths:
+                msg = (
+                    "No waypoints, track points, or route points found "
+                    "in the selected file(s)."
                 )
-            html = build_leaflet_html(wpts)
+                QMessageBox.information(self, "GPX", msg)
+            html = build_leaflet_html(wpts, geopaths)
             self._web.setHtml(html, QUrl("https://cdn.jsdelivr.net/"))
 
     # Do not pass GPX paths as Qt arguments; only the real process argv.

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from gpx_link.html_map import build_leaflet_html
-from gpx_link.parser import load_waypoints_from_paths
+from gpx_link.parser import load_map_features_from_paths
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     paths = [p.expanduser().resolve() for p in args.gpx]
 
     if args.command == "list":
-        wpts = load_waypoints_from_paths(paths)
+        wpts, _ = load_map_features_from_paths(paths)
         for w in wpts:
             line = {
                 "source": str(w.source_path),
@@ -56,8 +56,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "html":
-        wpts = load_waypoints_from_paths(paths)
-        html = build_leaflet_html(wpts)
+        wpts, geopaths = load_map_features_from_paths(paths)
+        html = build_leaflet_html(wpts, geopaths)
         if args.output:
             args.output.write_text(html, encoding="utf-8")
         else:

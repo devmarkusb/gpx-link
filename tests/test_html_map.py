@@ -4,7 +4,7 @@ from pathlib import Path
 
 from gpx_link.html_map import build_leaflet_html
 from gpx_link.maps_urls import google_maps_url
-from gpx_link.models import Waypoint
+from gpx_link.models import GeoPath, Waypoint
 
 
 def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
@@ -25,3 +25,16 @@ def test_build_leaflet_html_empty_world_view() -> None:
     html = build_leaflet_html([])
     assert "map.setView" in html
     assert "tile.openstreetmap.org" in html
+
+
+def test_build_leaflet_html_renders_track_polyline() -> None:
+    line = GeoPath(
+        Path("/x.gpx"),
+        "Trail",
+        "track",
+        ((45.51, -122.5), (45.52, -122.51)),
+    )
+    html = build_leaflet_html([], [line])
+    assert "L.polyline" in html
+    assert "45.51" in html and "-122.5" in html
+    assert "map.fitBounds" in html

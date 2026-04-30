@@ -4,8 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from gpx_link.parser import load_waypoints_from_files, load_waypoints_from_paths
-from tests.conftest import EMPTY_TRACK_GPX, SAMPLE_GPX
+from gpx_link.parser import (
+    load_map_features_from_paths,
+    load_waypoints_from_files,
+    load_waypoints_from_paths,
+)
+from tests.conftest import EMPTY_TRACK_GPX, ROUTE_GPX, SAMPLE_GPX, TRACK_GPX
 
 
 def test_load_waypoints_parses_names_and_coords(tmp_path: Path) -> None:
@@ -40,3 +44,26 @@ def test_load_waypoints_from_files_str_paths(tmp_path: Path) -> None:
     p.write_text(SAMPLE_GPX, encoding="utf-8")
     wpts = load_waypoints_from_files([str(p)])
     assert len(wpts) == 2
+
+
+def test_load_track_segments_as_geo_paths(tmp_path: Path) -> None:
+    p = tmp_path / "track.gpx"
+    p.write_text(TRACK_GPX, encoding="utf-8")
+    wpts, paths = load_map_features_from_paths([p])
+    assert wpts == []
+    assert len(paths) == 1
+    assert paths[0].kind == "track"
+    assert paths[0].name == "Loop"
+    assert len(paths[0].points) == 3
+    assert paths[0].points[0] == (45.51, -122.5)
+
+
+def test_load_route_as_geo_path(tmp_path: Path) -> None:
+    p = tmp_path / "rte.gpx"
+    p.write_text(ROUTE_GPX, encoding="utf-8")
+    wpts, paths = load_map_features_from_paths([p])
+    assert wpts == []
+    assert len(paths) == 1
+    assert paths[0].kind == "route"
+    assert paths[0].name == "Path"
+    assert paths[0].points[1] == (46.02, -123.03)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gpx_link.models import Waypoint
+from gpx_link.models import GeoPath, Waypoint
 
 # Minimum span so a single point still gets a sensible zoom (degrees).
 _MIN_SPAN_DEG = 0.002
@@ -31,10 +31,25 @@ class Bounds:
 
 def bounds_for_waypoints(waypoints: list[Waypoint]) -> Bounds | None:
     """Return axis-aligned bounds for all waypoints, or None if empty."""
-    if not waypoints:
+    return bounds_for_map(waypoints, [])
+
+
+def bounds_for_map(
+    waypoints: list[Waypoint],
+    paths: list[GeoPath],
+) -> Bounds | None:
+    """Bounding box over waypoints and path vertices; None if both are empty."""
+    lats: list[float] = []
+    lons: list[float] = []
+    for w in waypoints:
+        lats.append(w.latitude)
+        lons.append(w.longitude)
+    for p in paths:
+        for lat, lon in p.points:
+            lats.append(lat)
+            lons.append(lon)
+    if not lats:
         return None
-    lats = [w.latitude for w in waypoints]
-    lons = [w.longitude for w in waypoints]
     return Bounds(
         min_lat=min(lats),
         max_lat=max(lats),

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gpx_link.bounds import bounds_for_waypoints
-from gpx_link.models import Waypoint
+from gpx_link.bounds import bounds_for_map, bounds_for_waypoints
+from gpx_link.models import GeoPath, Waypoint
 
 
 def _w(lat: float, lon: float) -> Waypoint:
@@ -32,3 +32,16 @@ def test_bounds_multiple() -> None:
     assert b is not None
     assert b.min_lat == 0.0 and b.max_lat == 10.0
     assert b.min_lon == 0.0 and b.max_lon == 5.0
+
+
+def test_bounds_for_paths_without_waypoints() -> None:
+    gp = GeoPath(
+        Path("/t.gpx"),
+        "Line",
+        "track",
+        ((1.0, 2.0), (4.0, 6.0)),
+    )
+    b = bounds_for_map([], [gp])
+    assert b is not None
+    assert b.min_lat == 1.0 and b.max_lat == 4.0
+    assert b.min_lon == 2.0 and b.max_lon == 6.0

@@ -1,6 +1,6 @@
 # gpx-link
 
-View **GPX waypoints** on an **OpenStreetMap** basemap (Leaflet), **zoomed to fit** all points from one or more files. Click a marker to open the same location in **Google Maps** in the browser (exact coordinates so the pin matches the GPX data; you can explore nearby places there or start navigation).
+View **GPX waypoints** on an **OpenStreetMap** basemap (Leaflet), **zoomed to fit** all points from one or more files. Tracks and routes in the GPX are drawn as lines; waypoint markers remain clickable links to **Google Maps** (exact coordinates so the pin matches the GPX data; you can explore nearby places there or start navigation).
 
 The project keeps a **small, tested core library** and **CLI** separate from the **optional Qt desktop GUI**.
 
@@ -12,20 +12,85 @@ The project keeps a **small, tested core library** and **CLI** separate from the
 
 ## Install
 
+### From PyPI (released package)
+
+Install into a virtual environment when you can (recommended). After a successful install, the **`gpx-link`** and **`gpx-link-gui`** entry points must be on the environment’s **`PATH`** (for example `.venv/bin` if you activated a venv, or your user scripts directory for `pip install --user`).
+
+**CLI only** (listing waypoints JSON and emitting HTML maps):
+
 ```bash
-# Library + CLI only
-pip install gpx-link
-# or, from a clone:
+python -m pip install gpx-link
+```
+
+Upgrade an existing install:
+
+```bash
+python -m pip install --upgrade gpx-link
+```
+
+**CLI + desktop GUI** (Linux, macOS, Windows):
+
+```bash
+python -m pip install 'gpx-link[gui]'
+```
+
+If you manage packages with **[uv](https://docs.astral.sh/uv/)** globally or inside a project venv, the same installs work with **`uv pip`** (they still pull from PyPI):
+
+```bash
+uv pip install gpx-link
+uv pip install 'gpx-link[gui]'
+```
+
+Sanity check for the CLI:
+
+```bash
+gpx-link --help
+```
+
+After installing **`[gui]`**, run **`gpx-link-gui`** once to confirm the desktop app starts.
+
+If **`gpx-link`** is **not found**, the **`bin`** (or Scripts) folder for that environment is probably not on **`PATH`**. Either activate your venv, or call the CLI with the same interpreter you used for pip: **`python -m gpx_link`**.
+
+### From a clone (local / development)
+
+Inside the repository, **[uv](https://docs.astral.sh/uv/)** is the smoothest workflow: **`uv sync`** creates or updates **`.venv`**, installs the package in editable form, and pulls **dev** dependencies from **`pyproject.toml`**.
+
+```bash
+git clone <your-fork-or-upstream-url> gpx-link
+cd gpx-link
 uv sync
 ```
 
-Desktop app (Linux, macOS, Windows):
+Add the GUI stack when you work on **`gpx_link.gui`**:
 
 ```bash
-pip install 'gpx-link[gui]'
-# or:
 uv sync --extra gui
 ```
+
+**Run commands without activating the venv** (uv injects the project environment):
+
+```bash
+uv run gpx-link list track1.gpx
+uv run gpx-link html tour.gpx -o map.html
+uv run gpx-link-gui ./routes/*.gpx
+```
+
+**Run after activating `.venv`** (Unix example):
+
+```bash
+source .venv/bin/activate
+gpx-link list track1.gpx
+gpx-link-gui
+```
+
+**Pure pip / editable**, if you prefer not to use uv on a checkout:
+
+```bash
+python -m pip install -e .
+python -m pip install -e '.[gui]'
+```
+
+Contribution workflow (hooks, commits, pytest): **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## Command line
 
@@ -50,12 +115,12 @@ gpx-link-gui ./routes/*.gpx
 
 Use **Open GPX…** to load or replace files. The window embeds the same map HTML as the CLI generator.
 
-If the GUI command is missing or fails, install the `gui` extra and ensure Qt WebEngine is available on your platform.
+If **`gpx-link-gui`** is missing or **`ImportError`** appears, install the **`gui`** extra (`pip install 'gpx-link[gui]'` or `uv sync --extra gui` on a checkout) and ensure **Qt WebEngine** is supported on your platform.
 
 ## Behavior and URLs
 
 - **Map**: OpenStreetMap tiles via Leaflet (`html_map.build_leaflet_html`).
-- **Fit**: Bounds are computed from all waypoints, then padded so the view is not flush against the edges.
+- **Fit**: Bounds are computed from waypoints and track/route points, then padded so the view is not flush against the edges.
 - **Google Maps**: Each waypoint gets a coordinate-based Maps URL (`maps_urls.google_maps_url`). That opens the place at the GPX position; using the waypoint name alone for search would often pick the wrong POI, so the link is **lat/lng–first**.
 
 ## Project layout
@@ -74,6 +139,8 @@ uv run pytest
 uv run ruff check
 uv run ruff format --check
 ```
+
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for pre-commit, Conventional Commits, and full setup.
 
 ## Release tooling
 
