@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">GPX Link</string>
     <string name="open_gpx">Open GPX…</string>
+    <string name="gpx_file_list">GPX file list</string>
     <string name="gpx_parse_error">Could not read GPX</string>
     <string name="gpx_empty_features">No waypoints, track points, or route points found in the selected file(s).</string>
 </resources>

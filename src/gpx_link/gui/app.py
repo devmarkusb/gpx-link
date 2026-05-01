@@ -12,8 +12,8 @@ def main(argv: list[str] | None = None) -> int:
     paths = [Path(a).expanduser().resolve() for a in path_args]
 
     try:
-        from PySide6.QtCore import QSettings, Qt, QUrl
-        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QByteArray, QSettings, Qt, QUrl
+        from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
         from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest
         from PySide6.QtWebEngineWidgets import QWebEngineView
         from PySide6.QtWidgets import (
@@ -40,6 +40,8 @@ def main(argv: list[str] | None = None) -> int:
     _SETTINGS_ORG = "GPX-Link"
     _SETTINGS_APP = "GPXLink"
     _LAST_OPEN_DIR_KEY = "last_open_gpx_directory"
+    _SHOW_FILE_PANEL_KEY = "show_file_panel"
+    _SPLITTER_STATE_KEY = "main_splitter_state"
 
     class MainWindow(QMainWindow):
         def __init__(self, initial_paths: list[Path]) -> None:
@@ -51,25 +53,73 @@ def main(argv: list[str] | None = None) -> int:
             self._file_list.setMinimumWidth(220)
             self._file_list.itemChanged.connect(self._on_file_item_changed)
 
-            splitter = QSplitter()
-            splitter.addWidget(self._file_list)
-            splitter.addWidget(self._web)
-            splitter.setStretchFactor(0, 0)
-            splitter.setStretchFactor(1, 1)
+            self._splitter = QSplitter()
+            self._splitter.addWidget(self._file_list)
+            self._splitter.addWidget(self._web)
+            self._splitter.setStretchFactor(0, 0)
+            self._splitter.setStretchFactor(1, 1)
 
             central = QWidget()
             layout = QVBoxLayout(central)
             layout.setContentsMargins(0, 0, 0, 0)
-            layout.addWidget(splitter)
+            layout.addWidget(self._splitter)
             self.setCentralWidget(central)
             self._web.page().newWindowRequested.connect(self._on_new_window_requested)
 
             tb = QToolBar()
             tb.addAction("Open GPX…", self._open_files)
+            self._action_file_panel = QAction("GPX file list", self)
+            self._action_file_panel.setCheckable(True)
+            self._action_file_panel.setShortcut(QKeySequence("Ctrl+Shift+L"))
+            self._action_file_panel.setToolTip(
+                "Show or hide the GPX file list (full width for the map)"
+            )
+            show_panel = self._settings.value(_SHOW_FILE_PANEL_KEY, True)
+            if isinstance(show_panel, str):
+                show_panel = show_panel.lower() in ("true", "1", "yes")
+            else:
+                show_panel = bool(show_panel)
+            saved_state = self._settings.value(_SPLITTER_STATE_KEY)
+            if (
+                show_panel
+                and isinstance(saved_state, QByteArray)
+                and not saved_state.isEmpty()
+            ):
+                self._splitter.restoreState(saved_state)
+            self._action_file_panel.setChecked(show_panel)
+            self._action_file_panel.toggled.connect(self._on_file_panel_toggled)
+            tb.addAction(self._action_file_panel)
             self.addToolBar(tb)
+            self._apply_file_panel_visibility(show_panel)
 
             self._add_paths_to_list(initial_paths)
             self._reload()
+
+        def _persist_layout(self) -> None:
+            self._settings.setValue(_SHOW_FILE_PANEL_KEY, self._file_list.isVisible())
+            if self._file_list.isVisible():
+                self._settings.setValue(_SPLITTER_STATE_KEY, self._splitter.saveState())
+
+        def _on_file_panel_toggled(self, visible: bool) -> None:
+            if not visible:
+                self._settings.setValue(_SPLITTER_STATE_KEY, self._splitter.saveState())
+            self._apply_file_panel_visibility(visible)
+            if visible:
+                saved = self._settings.value(_SPLITTER_STATE_KEY)
+                if isinstance(saved, QByteArray) and not saved.isEmpty():
+                    self._splitter.restoreState(saved)
+            self._settings.setValue(_SHOW_FILE_PANEL_KEY, visible)
+
+        def _apply_file_panel_visibility(self, visible: bool) -> None:
+            self._file_list.setVisible(visible)
+            if visible and self._splitter.sizes()[0] == 0:
+                total = max(self._splitter.width(), 400)
+                left = min(280, total // 3)
+                self._splitter.setSizes([left, max(1, total - left)])
+
+        def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+            self._persist_layout()
+            super().closeEvent(event)
 
         def _saved_open_directory(self) -> str:
             v = self._settings.value(_LAST_OPEN_DIR_KEY, "")
