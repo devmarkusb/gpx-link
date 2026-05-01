@@ -1,5 +1,10 @@
 # gpx-link
 
+[![PyPI version](https://img.shields.io/pypi/v/gpx-link)](https://pypi.org/project/gpx-link/)
+[![Python versions](https://img.shields.io/pypi/pyversions/gpx-link)](https://pypi.org/project/gpx-link/)
+[![CI](https://github.com/devmarkusb/gpx-link/actions/workflows/ci.yml/badge.svg)](https://github.com/devmarkusb/gpx-link/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 View **GPX waypoints** on an **OpenStreetMap** basemap (Leaflet), **zoomed to fit** all points from one or more files. Tracks and routes are drawn as paths (**polylines**; a single-point segment appears as a small circle marker). **Waypoint marker clicks** open **Google Maps** in a new tab or your default browser; how the link is built depends on the waypoint name (see **Behavior and URLs**).
 
 The project keeps a **small, tested core library** and **CLI** separate from the **optional Qt desktop GUI**.
