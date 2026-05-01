@@ -5,4 +5,10 @@
         android:id="@+id/action_open"
         android:title="@string/open_gpx"
         app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_toggle_file_list"
+        android:title="@string/gpx_file_list"
+        android:checkable="true"
+        android:checked="true"
+        app:showAsAction="never" />
 </menu>

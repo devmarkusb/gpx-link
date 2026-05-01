@@ -11,6 +11,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -27,6 +28,7 @@ class MainActivity : AppCompatActivity() {
 
     private val gpxItems = mutableListOf<GpxListItem>()
     private lateinit var webView: WebView
+    private lateinit var fileList: RecyclerView
     private lateinit var adapter: GpxFileAdapter
 
     private val openGpxLauncher =
@@ -57,31 +59,48 @@ class MainActivity : AppCompatActivity() {
 
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         toolbar.inflateMenu(R.menu.main)
+
+        val panelVisible = savedInstanceState?.getBoolean(STATE_FILE_PANEL_VISIBLE, true) ?: true
+        fileList = findViewById(R.id.file_list)
+        fileList.visibility = if (panelVisible) View.VISIBLE else View.GONE
+        toolbar.menu.findItem(R.id.action_toggle_file_list)?.isChecked = panelVisible
+
         toolbar.setOnMenuItemClickListener { item ->
-            if (item.itemId == R.id.action_open) {
-                openGpxLauncher.launch(
-                    arrayOf(
-                        "application/gpx+xml",
-                        "application/xml",
-                        "text/xml",
-                        "application/octet-stream",
-                        "*/*",
-                    ),
-                )
-                true
-            } else {
-                false
+            when (item.itemId) {
+                R.id.action_open -> {
+                    openGpxLauncher.launch(
+                        arrayOf(
+                            "application/gpx+xml",
+                            "application/xml",
+                            "text/xml",
+                            "application/octet-stream",
+                            "*/*",
+                        ),
+                    )
+                    true
+                }
+                R.id.action_toggle_file_list -> {
+                    val show = fileList.visibility != View.VISIBLE
+                    fileList.visibility = if (show) View.VISIBLE else View.GONE
+                    item.isChecked = show
+                    true
+                }
+                else -> false
             }
         }
 
-        val recycler = findViewById<RecyclerView>(R.id.file_list)
-        recycler.layoutManager = LinearLayoutManager(this)
+        fileList.layoutManager = LinearLayoutManager(this)
         adapter = GpxFileAdapter(gpxItems) { reloadMap() }
-        recycler.adapter = adapter
+        fileList.adapter = adapter
 
         webView = findViewById(R.id.map_webview)
         setupWebView(webView)
         loadEmptyMap()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_FILE_PANEL_VISIBLE, fileList.visibility == View.VISIBLE)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -177,5 +196,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return uri.lastPathSegment
+    }
+
+    private companion object {
+        const val STATE_FILE_PANEL_VISIBLE = "file_panel_visible"
     }
 }
