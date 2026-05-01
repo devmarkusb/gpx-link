@@ -102,7 +102,31 @@ Triggers on **`v*`** tags (for example **`v1.2.0`**, aligned with **python-seman
 
 Optional: **`PLAY_SERVICE_ACCOUNT_JSON`** — JSON key for the Play Developer API. If unset, the workflow still builds and uploads artifacts to the GitHub run (and attaches **AAB/APK** to the GitHub **Release** when the ref is a **`v*`** tag); it **skips** calling Fastlane upload.
 
-Manual runs can choose Play **track** (`internal`, `alpha`, `beta`, `production`) and optionally push Fastlane **metadata** (`title`, short/long descriptions under **`android/fastlane/metadata/`**).
+Manual runs can choose Play **track** (`internal`, `alpha`, `beta`, `production`) and, with **Push fastlane metadata to Play** enabled, upload the full **store listing** (not only the binary): titles, descriptions, promotional text, **graphics** (icon, feature graphic, screenshots), and **per-version release notes**. Tag-triggered runs upload the **AAB only** unless you change the workflow; use **workflow_dispatch** with that checkbox when you want listing assets pushed.
+
+### Play store listing (Fastlane, English US)
+
+Paths are relative to the repo root.
+
+| Path | Role |
+| ---- | ---- |
+| **`android/fastlane/metadata/android/en-US/title.txt`** | Play title (**Maps GPX**; max 30 characters) |
+| **`android/fastlane/metadata/android/en-US/short_description.txt`** | Short description (max 80 characters) |
+| **`android/fastlane/metadata/android/en-US/full_description.txt`** | Full description |
+| **`android/fastlane/metadata/android/en-US/promotional_text.txt`** | Optional promo blurb (max 80 characters) |
+| **`android/fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`** | “What’s new” for that upload (`versionCode` matches **`android/app/build.gradle.kts`**) |
+| **`android/fastlane/metadata/android/en-US/images/icon.png`** | High-res icon (512×512) |
+| **`android/fastlane/metadata/android/en-US/images/featureGraphic.png`** | Feature graphic (1024×500) |
+| **`android/fastlane/metadata/android/en-US/images/phoneScreenshots/*.png`** | Phone screenshots |
+| **`android/fastlane/metadata/android/en-US/play_store_notes.txt`** | Maintainer checklist and title alternatives |
+
+Regenerate the listing bitmaps (Pillow is not a locked project dependency; the command pulls it for the run):
+
+```bash
+uv run --with pillow python scripts/generate_play_assets.py
+```
+
+Replace placeholder screenshots with real device or emulator captures before a production listing if you want pixel-perfect accuracy.
 
 ### Play Console checklist (maintainers)
 
