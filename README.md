@@ -145,7 +145,7 @@ uv run ruff check
 uv run ruff format --check
 ```
 
-See **[CONTRIBUTING.md](CONTRIBUTING.md)** for pre-commit, Conventional Commits, and full setup.
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for pre-commit and full setup.
 
 ## Release tooling
 

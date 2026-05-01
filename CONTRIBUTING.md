@@ -28,12 +28,9 @@
 
    ```bash
    uv run pre-commit install
-   uv run pre-commit install --hook-type commit-msg
    ```
 
    Alternatively, activate **`.venv`** and run **`pre-commit install`** without the **`uv run`** prefix.
-
-All commits must follow [Conventional Commits](https://www.conventionalcommits.org/) format.
 
 ## Running CLI and GUI locally
 
