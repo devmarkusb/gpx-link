@@ -6,7 +6,6 @@ Describe the changes and why they are needed.
 
 - [ ] Add tests where applicable
 - [ ] Update documentation (README, CHANGELOG) if relevant
-- [ ] Follow Conventional Commits
 
 ## Release Notes
 
