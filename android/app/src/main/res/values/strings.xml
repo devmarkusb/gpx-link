@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">GPX Link</string>
+    <string name="app_name">Maps GPX</string>
     <string name="open_gpx">Open GPX…</string>
     <string name="gpx_file_list">GPX file list</string>
     <string name="gpx_parse_error">Could not read GPX</string>

@@ -1,1 +1,1 @@
-View GPX waypoints on OpenStreetMap and open locations in Google Maps.
+Open GPX files: OSM map with tracks & waypoints; tap markers for Google Maps.

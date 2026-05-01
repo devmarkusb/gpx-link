@@ -136,11 +136,19 @@ If **`gpx-link-gui`** is missing or **`ImportError`** appears, install the **`gu
 | `gpx_link` | Parsing (`parser`), models (`models`), bounds (`bounds`), map HTML (`html_map`), Google Maps URLs (`maps_urls`) |
 | `gpx_link.cli` | `gpx-link` — `list` and `html` subcommands |
 | `gpx_link.gui.app` | `gpx-link-gui` — Qt window + `QWebEngineView` |
-| `android/` | Chaquopy-based Android app (same package logic synced into the APK/AAB) |
+| `android/` | Chaquopy-based **Maps GPX** Android app (Play listing name; `applicationId` **`io.github.gpxlink`**) |
 
 ## Android app and Google Play
 
-There is a native **Android** wrapper under **`android/`** (Kotlin + [Chaquopy](https://chaquo.com/chaquopy/)). **`versionName`** and **`versionCode`** come from **`pyproject.toml`** (`project.version`), so bump the Python package version before a store release.
+There is a native **Android** wrapper under **`android/`** (Kotlin + [Chaquopy](https://chaquo.com/chaquopy/)). The on-device and Play Store listing name is **Maps GPX**; the Python package and repo remain **gpx-link**, and the Android application id stays **`io.github.gpxlink`** for continuity with existing installs.
+
+**`versionName`** and **`versionCode`** come from **`pyproject.toml`** (`project.version`), so bump the Python package version before a store release.
+
+**Store listing text and graphics** for English (US) live under **`android/fastlane/metadata/android/en-US/`**: `title.txt`, `short_description.txt`, `full_description.txt`, optional `promotional_text.txt`, release notes in **`changelogs/<versionCode>.txt`**, and bitmaps under **`images/`** (512×512 icon, 1024×500 feature graphic, phone screenshots). Maintainer notes and alternate titles are in **`play_store_notes.txt`**. Regenerate the PNGs anytime:
+
+```bash
+uv run --with pillow python scripts/generate_play_assets.py
+```
 
 CI builds **debug** APKs on every push/PR; **release** signing and uploads are documented in **[CONTRIBUTING.md](CONTRIBUTING.md)** (GitHub secrets, tags, Fastlane, Play Console).
 
@@ -159,7 +167,7 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for pre-commit and full setup.
 
 Version bumps and changelogs can be managed with **python-semantic-release** (see `pyproject.toml` and `CHANGELOG.md`). Publishing to PyPI expects your own Trusted Publisher and GitHub environment setup.
 
-Publishing the **Android** build to **Google Play** uses the **`Android Play release`** workflow (`.github/workflows/android-play.yml`): push a tag matching **`v*`** (for example after semantic-release tags a release), or run it manually from the Actions tab. See **[CONTRIBUTING.md — Android builds and Google Play](CONTRIBUTING.md#android-builds-and-google-play)** for secrets, keystores, and store checklist.
+Publishing the **Android** build to **Google Play** uses the **`Android Play release`** workflow (`.github/workflows/android-play.yml`): push a tag matching **`v*`** (for example after semantic-release tags a release), or run it manually from the Actions tab. Manual runs can enable **Push fastlane metadata to Play** to upload listing copy and graphics from **`android/fastlane/metadata/`** together with the **AAB**. See **[CONTRIBUTING.md — Android builds and Google Play](CONTRIBUTING.md#android-builds-and-google-play)** for secrets, keystores, the Fastlane file map, and the Play Console checklist.
 
 ## License
 

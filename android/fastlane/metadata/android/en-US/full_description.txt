@@ -1,3 +1,17 @@
-GPX Link lets you open GPX files on your device, browse waypoints and track points on OpenStreetMap, and jump to locations in Google Maps.
+Maps GPX is a lightweight viewer for GPX files on Android. Open tracks and waypoints from storage or cloud providers, see them on an OpenStreetMap-style map (Leaflet), and tap markers to jump into Google Maps when you want turn-by-turn or richer POI context.
 
-Perfect for hiking, cycling, and field work when you already have GPX data and want a quick map-centric view on Android.
+<b>What you can do</b>
+• Open one or many GPX files and combine what is checked in the list
+• Pan and zoom a map that fits your data with padding
+• See tracks and routes as paths (polylines); short segments read at a glance as small markers
+• Toggle the file list panel when you want more map space
+• Tap waypoint markers to open Google Maps (named waypoints use a search-style link centered on coordinates)
+
+<b>Who it is for</b>
+Hikers, cyclists, runners, and anyone who already has GPX exports and wants a fast map-first view on their phone—without turning it into a social platform or account-based service.
+
+<b>Privacy</b>
+The app loads map tiles and scripts over the network (OpenStreetMap / CDNs) when you view the map. It does not require a Maps GPX account. See the project documentation for details on data handling you publish alongside the store listing.
+
+<b>Open source</b>
+Built from the same GPX rendering core as the gpx-link project on GitHub—handy if you use the desktop or CLI tools too.

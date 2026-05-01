@@ -28,7 +28,7 @@ on:
           - beta
           - production
       upload_store_listing:
-        description: Push fastlane metadata to Play (title, descriptions)
+        description: Push fastlane metadata to Play (listing text, graphics, changelogs)
         required: false
         default: false
         type: boolean
