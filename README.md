@@ -3,6 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/gpx-link)](https://pypi.org/project/gpx-link/)
 [![Python versions](https://img.shields.io/pypi/pyversions/gpx-link)](https://pypi.org/project/gpx-link/)
 [![CI](https://github.com/devmarkusb/gpx-link/actions/workflows/ci.yml/badge.svg)](https://github.com/devmarkusb/gpx-link/actions/workflows/ci.yml)
+[![Android Play release](https://github.com/devmarkusb/gpx-link/actions/workflows/android-play.yml/badge.svg)](https://github.com/devmarkusb/gpx-link/actions/workflows/android-play.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 View **GPX waypoints** on an **OpenStreetMap** basemap (Leaflet), **zoomed to fit** all points from one or more files. Tracks and routes are drawn as paths (**polylines**; a single-point segment appears as a small circle marker). **Waypoint marker clicks** open **Google Maps** in a new tab or your default browser; how the link is built depends on the waypoint name (see **Behavior and URLs**).
@@ -135,6 +136,13 @@ If **`gpx-link-gui`** is missing or **`ImportError`** appears, install the **`gu
 | `gpx_link` | Parsing (`parser`), models (`models`), bounds (`bounds`), map HTML (`html_map`), Google Maps URLs (`maps_urls`) |
 | `gpx_link.cli` | `gpx-link` — `list` and `html` subcommands |
 | `gpx_link.gui.app` | `gpx-link-gui` — Qt window + `QWebEngineView` |
+| `android/` | Chaquopy-based Android app (same package logic synced into the APK/AAB) |
+
+## Android app and Google Play
+
+There is a native **Android** wrapper under **`android/`** (Kotlin + [Chaquopy](https://chaquo.com/chaquopy/)). **`versionName`** and **`versionCode`** come from **`pyproject.toml`** (`project.version`), so bump the Python package version before a store release.
+
+CI builds **debug** APKs on every push/PR; **release** signing and uploads are documented in **[CONTRIBUTING.md](CONTRIBUTING.md)** (GitHub secrets, tags, Fastlane, Play Console).
 
 ## Development
 
@@ -150,6 +158,8 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for pre-commit and full setup.
 ## Release tooling
 
 Version bumps and changelogs can be managed with **python-semantic-release** (see `pyproject.toml` and `CHANGELOG.md`). Publishing to PyPI expects your own Trusted Publisher and GitHub environment setup.
+
+Publishing the **Android** build to **Google Play** uses the **`Android Play release`** workflow (`.github/workflows/android-play.yml`): push a tag matching **`v*`** (for example after semantic-release tags a release), or run it manually from the Actions tab. See **[CONTRIBUTING.md — Android builds and Google Play](CONTRIBUTING.md#android-builds-and-google-play)** for secrets, keystores, and store checklist.
 
 ## License
 

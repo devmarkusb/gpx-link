@@ -63,6 +63,54 @@ Use **`python -m pip install --upgrade gpx-link`** to refresh after a new releas
 uv run pytest --cov
 ```
 
+## Android builds and Google Play
+
+### Local builds
+
+- Install **JDK 17** (matches CI and the Android Gradle Plugin).
+- From **`android/`**:
+
+  ```bash
+  chmod +x gradlew   # once, if needed
+  ./gradlew assembleDebug
+  ```
+
+  Debug APK output: **`android/app/build/outputs/apk/debug/`**.
+
+- **Release** builds need **`android/keystore.properties`** and an upload keystore file (paths relative to **`android/`**). Copy **`android/keystore.properties.example`** to **`keystore.properties`**, fill in passwords and alias, and point **`storeFile`** at your **`.jks`**. Those files are **gitignored**; never commit them.
+
+  ```bash
+  ./gradlew bundleRelease assembleRelease
+  ```
+
+  Signed **AAB** (what Play expects for new uploads): **`app/build/outputs/bundle/release/app-release.aab`**. Signed release APK: **`app/build/outputs/apk/release/app-release.apk`**.
+
+On macOS, prefer **Ruby 3.3+** if you run **Fastlane** locally (`bundle install` in **`android/`**); CI uses **`ruby/setup-ruby`** with Bundler **2.5.23**.
+
+### CI: `.github/workflows/android-play.yml`
+
+Triggers on **`v*`** tags (for example **`v1.2.0`**, aligned with **python-semantic-release**) or **manual `workflow_dispatch`**.
+
+**Required repository secrets** for a signed release build:
+
+| Secret | Purpose |
+| ------ | ------- |
+| **`ANDROID_KEYSTORE_BASE64`** | Base64-encoded upload keystore (`.jks`) |
+| **`ANDROID_KEYSTORE_PASSWORD`** | Keystore password |
+| **`ANDROID_KEY_ALIAS`** | Signing key alias |
+| **`ANDROID_KEY_PASSWORD`** | Key password (often the same as the keystore password for PKCS12-style keystores) |
+
+Optional: **`PLAY_SERVICE_ACCOUNT_JSON`** — JSON key for the Play Developer API. If unset, the workflow still builds and uploads artifacts to the GitHub run (and attaches **AAB/APK** to the GitHub **Release** when the ref is a **`v*`** tag); it **skips** calling Fastlane upload.
+
+Manual runs can choose Play **track** (`internal`, `alpha`, `beta`, `production`) and optionally push Fastlane **metadata** (`title`, short/long descriptions under **`android/fastlane/metadata/`**).
+
+### Play Console checklist (maintainers)
+
+1. Create the app listing if it does not exist; accept Play App Signing and register your **upload** certificate.
+2. In **API access**, link a Google Cloud project and create a **service account** with permission to release; download JSON into **`PLAY_SERVICE_ACCOUNT_JSON`**.
+3. Complete **store listing**, **content rating**, **target audience**, **privacy policy** / **data safety** as required (the app declares **`INTERNET`**).
+4. Promote builds from **internal testing** upward once binaries install and behave as expected.
+
 ## Notes
 
 - Ensure `.secrets.baseline` exists before running `pre-commit install` to avoid the detect-secrets hook blocking commits.

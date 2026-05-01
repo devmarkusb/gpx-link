@@ -1,0 +1,3 @@
+GPX Link lets you open GPX files on your device, browse waypoints and track points on OpenStreetMap, and jump to locations in Google Maps.
+
+Perfect for hiking, cycling, and field work when you already have GPX data and want a quick map-centric view on Android.

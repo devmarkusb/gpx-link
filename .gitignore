@@ -48,5 +48,13 @@ coverage.xml
 # Misc
 /android/local.properties
 
+# Android Play Store signing & API keys (never commit)
+/android/keystore.properties
+/android/upload-keystore.jks
+/android/*.jks
+/android/play-console-service-account.json
+/android/vendor/
+/android/.bundle/
+
 # Chaquopy: synced copy of src/gpx_link (see syncGpxLinkPython in android/app/build.gradle.kts)
 /android/app/src/main/python/gpx_link/

@@ -1,0 +1,67 @@
+# frozen_string_literal: true
+
+default_platform(:android)
+
+# Directory containing gradlew (parent of fastlane/).
+ANDROID_DIR = File.expand_path("..", __dir__).freeze
+
+platform :android do
+  lane :build_release do
+    gradle(
+      task: "bundleRelease assembleRelease",
+      project_dir: ANDROID_DIR,
+    )
+  end
+
+  # Upload the release AAB. Requires PLAY_SERVICE_ACCOUNT_JSON and prior Play Console setup.
+  # track: internal | alpha | beta | production
+  lane :upload_play do |options|
+    track = (options[:track] || ENV["PLAY_TRACK"] || "internal").to_s
+    json = ENV["PLAY_SERVICE_ACCOUNT_JSON"]
+    json_path = File.join(ANDROID_DIR, "play-console-service-account.json")
+    if json && !json.empty?
+      File.write(json_path, json)
+    elsif File.exist?(json_path)
+      # local run with file already present
+    else
+      UI.user_error!("Set PLAY_SERVICE_ACCOUNT_JSON or place play-console-service-account.json in android/")
+    end
+
+    aab = File.join(ANDROID_DIR, "app/build/outputs/bundle/release/app-release.aab")
+    UI.user_error!("Missing AAB at #{aab}; run build_release first") unless File.exist?(aab)
+
+    upload_to_play_store(
+      track: track,
+      json_key: json_path,
+      aab: aab,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+    )
+  end
+
+  lane :upload_play_with_metadata do |options|
+    track = (options[:track] || ENV["PLAY_TRACK"] || "internal").to_s
+    json = ENV["PLAY_SERVICE_ACCOUNT_JSON"]
+    json_path = File.join(ANDROID_DIR, "play-console-service-account.json")
+    if json && !json.empty?
+      File.write(json_path, json)
+    elsif File.exist?(json_path)
+    else
+      UI.user_error!("Set PLAY_SERVICE_ACCOUNT_JSON or place play-console-service-account.json in android/")
+    end
+
+    aab = File.join(ANDROID_DIR, "app/build/outputs/bundle/release/app-release.aab")
+    UI.user_error!("Missing AAB at #{aab}; run build_release first") unless File.exist?(aab)
+
+    upload_to_play_store(
+      track: track,
+      json_key: json_path,
+      aab: aab,
+      skip_upload_apk: true,
+      metadata_path: File.join(__dir__, "metadata"),
+    )
+  end
+end
