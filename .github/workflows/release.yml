@@ -43,7 +43,8 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: version
-    if: needs.version.outputs.released == 'true'
+    # TEMP: PyPI account unavailable — drop `false &&` to re-enable publish
+    if: ${{ false && needs.version.outputs.released == 'true' }}
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
