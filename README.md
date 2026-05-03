@@ -1,10 +1,10 @@
 # gpx-link
 
-[![PyPI version](https://img.shields.io/pypi/v/gpx-link)](https://pypi.org/project/gpx-link/)
-[![Python versions](https://img.shields.io/pypi/pyversions/gpx-link)](https://pypi.org/project/gpx-link/)
-[![CI](https://github.com/devmarkusb/gpx-link/actions/workflows/ci.yml/badge.svg)](https://github.com/devmarkusb/gpx-link/actions/workflows/ci.yml)
-[![Android Play release](https://github.com/devmarkusb/gpx-link/actions/workflows/android-play.yml/badge.svg)](https://github.com/devmarkusb/gpx-link/actions/workflows/android-play.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/gpx-link?label=PyPI)](https://pypi.org/project/gpx-link/)
+[![Python versions](https://img.shields.io/pypi/pyversions/gpx-link?label=Python)](https://pypi.org/project/gpx-link/)
+[![CI workflow](https://img.shields.io/badge/CI-ci.yml-2088FF?logo=githubactions&logoColor=white)](https://github.com/devmarkusb/gpx-link/actions/workflows/ci.yml)
+[![Android Play workflow](https://img.shields.io/badge/Google_Play-release_workflow-3DDC84?logo=googleplay&logoColor=white)](https://github.com/devmarkusb/gpx-link/actions/workflows/android-play.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-informational)](LICENSE)
 
 View **GPX waypoints** on an **OpenStreetMap** basemap (Leaflet), **zoomed to fit** all points from one or more files. Tracks and routes are drawn as paths (**polylines**; a single-point segment appears as a small circle marker). **Waypoint marker clicks** open **Google Maps** in a new tab or your default browser; how the link is built depends on the waypoint name (see **Behavior and URLs**).
 
