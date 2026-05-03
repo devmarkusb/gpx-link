@@ -60,7 +60,19 @@ jobs:
             echo "Missing secret ANDROID_KEYSTORE_BASE64"
             exit 1
           fi
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > upload-keystore.jks
+          # Robust decode: strip whitespace (wrapped macOS/base64 lines), avoid echo mangling huge values
+          python3 -c "
+          import os, base64, pathlib
+          s = ''.join(os.environ['ANDROID_KEYSTORE_BASE64'].split())
+          pathlib.Path('upload-keystore.jks').write_bytes(base64.b64decode(s, validate=False))
+          "
+          # JKS magic: fe ed fe ed. PKCS#12 / .p12 usually starts with DER SEQUENCE 30 82.
+          head_bytes=$(head -c 4 upload-keystore.jks | xxd -p | tr -d '\n')
+          head_two=$(head -c 2 upload-keystore.jks | xxd -p | tr -d '\n')
+          if [ "$head_bytes" != "feedfeed" ] && [ "$head_two" != "3082" ]; then
+            echo "::error::Decoded file does not look like JKS or PKCS12 (first bytes=$head_bytes). Re-create ANDROID_KEYSTORE_BASE64 (Linux: base64 -w0 file.jks; macOS: base64 -i file.jks | tr -d '\\n'). GitHub secrets max 48KB — truncation corrupts the file."
+            exit 1
+          fi
 
       - name: Write keystore.properties
         working-directory: android
@@ -73,12 +85,30 @@ jobs:
             eval "v=\${$name}"
             if [ -z "$v" ]; then echo "Missing secret $name"; exit 1; fi
           done
+          # Strip CR from pasted secrets (Windows line endings break passwords).
+          STORE_PW=$(printf '%s' "$ANDROID_KEYSTORE_PASSWORD" | tr -d '\r')
+          KEY_PW=$(printf '%s' "$ANDROID_KEY_PASSWORD" | tr -d '\r')
+          ALIAS=$(printf '%s' "$ANDROID_KEY_ALIAS" | tr -d '\r')
           {
             echo "storeFile=upload-keystore.jks"
-            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
-            echo "keyAlias=$ANDROID_KEY_ALIAS"
-            echo "keyPassword=$ANDROID_KEY_PASSWORD"
+            echo "storePassword=$STORE_PW"
+            echo "keyAlias=$ALIAS"
+            echo "keyPassword=$KEY_PW"
           } > keystore.properties
+
+      - name: Verify keystore (keytool)
+        working-directory: android
+        env:
+          STORE_PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          STORE_PW=$(printf '%s' "$STORE_PW" | tr -d '\r')
+          KEY_ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -d '\r')
+          if ! keytool -list -keystore upload-keystore.jks -storepass "$STORE_PW" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error::keytool could not open the keystore or alias. Check ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and that ANDROID_KEYSTORE_BASE64 is the exact file you use locally (not truncated; GitHub secret max 48KB)."
+            keytool -list -keystore upload-keystore.jks -storepass "$STORE_PW" 2>&1 || true
+            exit 1
+          fi
 
       - name: Gradle release bundle + APK
         working-directory: android
