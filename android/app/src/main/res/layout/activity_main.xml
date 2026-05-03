@@ -29,10 +29,25 @@
             android:paddingTop="4dp"
             android:paddingBottom="4dp" />
 
-        <WebView
-            android:id="@+id/map_webview"
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="65" />
+            android:layout_weight="65">
+
+            <WebView
+                android:id="@+id/map_webview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fab_my_location"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="12dp"
+                android:contentDescription="@string/my_location_cd"
+                app:srcCompat="@drawable/ic_my_location_24"
+                app:tint="@color/md_theme_on_primary" />
+        </FrameLayout>
     </LinearLayout>
 </LinearLayout>
