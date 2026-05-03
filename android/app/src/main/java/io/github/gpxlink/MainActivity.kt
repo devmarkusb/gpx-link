@@ -1,10 +1,18 @@
 package io.github.gpxlink
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.database.Cursor
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
+import android.os.Looper
 import android.os.Message
 import android.provider.OpenableColumns
 import android.webkit.WebChromeClient
@@ -15,11 +23,13 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -30,6 +40,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var fileList: RecyclerView
     private lateinit var adapter: GpxFileAdapter
+
+    private val locationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+            val ok =
+                grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                    grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            if (ok) {
+                centerMapOnCurrentLocation()
+            } else {
+                Toast.makeText(this, R.string.location_permission_denied, Toast.LENGTH_LONG).show()
+            }
+        }
 
     private val openGpxLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -96,6 +118,19 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.map_webview)
         setupWebView(webView)
         loadEmptyMap()
+
+        findViewById<FloatingActionButton>(R.id.fab_my_location).setOnClickListener {
+            if (hasLocationPermission()) {
+                centerMapOnCurrentLocation()
+            } else {
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    ),
+                )
+            }
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -196,6 +231,97 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return uri.lastPathSegment
+    }
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+
+    @SuppressLint("MissingPermission")
+    private fun centerMapOnCurrentLocation() {
+        val lm = getSystemService(LOCATION_SERVICE) as LocationManager
+        val candidates =
+            listOf(
+                LocationManager.GPS_PROVIDER,
+                LocationManager.NETWORK_PROVIDER,
+                LocationManager.PASSIVE_PROVIDER,
+            )
+        var newest: Location? = null
+        for (p in candidates) {
+            if (!lm.isProviderEnabled(p)) continue
+            val loc = lm.getLastKnownLocation(p) ?: continue
+            if (newest == null || loc.elapsedRealtimeNanos > newest.elapsedRealtimeNanos) {
+                newest = loc
+            }
+        }
+        if (newest != null) {
+            injectUserLocationOnMap(newest.latitude, newest.longitude)
+            return
+        }
+        val activeProvider =
+            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+                .find { lm.isProviderEnabled(it) }
+        if (activeProvider == null) {
+            Toast.makeText(this, R.string.location_provider_disabled, Toast.LENGTH_LONG).show()
+            return
+        }
+        requestSingleFreshLocation(lm, activeProvider)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestSingleFreshLocation(lm: LocationManager, provider: String) {
+        Toast.makeText(this, R.string.location_searching, Toast.LENGTH_SHORT).show()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                lm.getCurrentLocation(
+                    provider,
+                    CancellationSignal(),
+                    ContextCompat.getMainExecutor(this),
+                ) { loc ->
+                    if (loc != null) {
+                        injectUserLocationOnMap(loc.latitude, loc.longitude)
+                    } else {
+                        Toast.makeText(this, R.string.location_error, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                lm.requestSingleUpdate(
+                    provider,
+                    object : LocationListener {
+                        override fun onLocationChanged(location: Location) {
+                            injectUserLocationOnMap(location.latitude, location.longitude)
+                        }
+
+                        @Deprecated("Deprecated in Java")
+                        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+
+                        override fun onProviderEnabled(provider: String) {}
+
+                        override fun onProviderDisabled(provider: String) {
+                            Toast.makeText(
+                                this@MainActivity,
+                                R.string.location_provider_disabled,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    },
+                    Looper.getMainLooper(),
+                )
+            }
+        } catch (_: SecurityException) {
+            Toast.makeText(this, R.string.location_error, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun injectUserLocationOnMap(lat: Double, lng: Double) {
+        val label = JSONObject.quote(getString(R.string.my_location_tooltip))
+        webView.evaluateJavascript(
+            "typeof gpxLinkSetUserLocation === 'function' && gpxLinkSetUserLocation($lat,$lng,$label)",
+            null,
+        )
     }
 
     private companion object {

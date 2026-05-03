@@ -19,6 +19,7 @@ def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
     assert "leaflet" in html.lower()
     assert "45.5" in html and "-122.5" in html
     assert "map.fitBounds" in html
+    assert "gpxLinkSetUserLocation" in html
     assert google_maps_url(45.5, -122.5, name="A") in html
     assert google_maps_url(46.0, -123.0, name="B") in html
 

@@ -117,6 +117,17 @@ def build_leaflet_html(
         '</span>';
       layer.bindTooltip(tip, {{ sticky: true }});
     }}
+    let userLocMarker = null;
+    window.gpxLinkSetUserLocation = function (lat, lng, label) {{
+      if (userLocMarker) {{
+        map.removeLayer(userLocMarker);
+      }}
+      const tip = label ? escHtml(label) : 'Current location';
+      userLocMarker = L.marker([lat, lng]).addTo(map);
+      userLocMarker.bindTooltip(tip, {{ sticky: true }});
+      const z = Math.max(map.getZoom(), 15);
+      map.setView([lat, lng], z);
+    }};
   </script>
 </body>
 </html>
