@@ -1,4 +1,4 @@
-package io.github.gpxlink
+package org.cismypa.gpxlink
 
 import android.view.LayoutInflater
 import android.view.View

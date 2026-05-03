@@ -136,11 +136,11 @@ If **`gpx-link-gui`** is missing or **`ImportError`** appears, install the **`gu
 | `gpx_link` | Parsing (`parser`), models (`models`), bounds (`bounds`), map HTML (`html_map`), Google Maps URLs (`maps_urls`) |
 | `gpx_link.cli` | `gpx-link` — `list` and `html` subcommands |
 | `gpx_link.gui.app` | `gpx-link-gui` — Qt window + `QWebEngineView` |
-| `android/` | Chaquopy-based **Maps GPX** Android app (Play listing name; `applicationId` **`io.github.gpxlink`**) |
+| `android/` | Chaquopy-based **Maps GPX** Android app (Play listing name; `applicationId` **`org.cismypa.gpxlink`**) |
 
 ## Android app and Google Play
 
-There is a native **Android** wrapper under **`android/`** (Kotlin + [Chaquopy](https://chaquo.com/chaquopy/)). The on-device and Play Store listing name is **Maps GPX**; the Python package and repo remain **gpx-link**, and the Android application id stays **`io.github.gpxlink`** for continuity with existing installs.
+There is a native **Android** wrapper under **`android/`** (Kotlin + [Chaquopy](https://chaquo.com/chaquopy/)). The on-device and Play Store listing name is **Maps GPX**; the Python package and repo remain **gpx-link**, and the Android application id is **`org.cismypa.gpxlink`**.
 
 **`versionName`** and **`versionCode`** come from **`pyproject.toml`** (`project.version`), so bump the Python package version before a store release.
 

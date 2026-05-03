@@ -31,11 +31,11 @@ val (playVersionCode, playVersionName) = readVersionFromPyproject(pyprojectToml)
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 
 android {
-    namespace = "io.github.gpxlink"
+    namespace = "org.cismypa.gpxlink"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "io.github.gpxlink"
+        applicationId = "org.cismypa.gpxlink"
         minSdk = 24
         targetSdk = 35
         versionCode = playVersionCode

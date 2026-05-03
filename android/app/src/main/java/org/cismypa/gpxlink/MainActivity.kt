@@ -1,4 +1,4 @@
-package io.github.gpxlink
+package org.cismypa.gpxlink
 
 import android.Manifest
 import android.annotation.SuppressLint
