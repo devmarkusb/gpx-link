@@ -10,6 +10,10 @@ name: Android Play release
 #   ANDROID_KEY_PASSWORD
 # Optional (Play API upload):
 #   PLAY_SERVICE_ACCOUNT_JSON — full JSON body of the Play Console service account key
+# Optional repository variable (Settings → Secrets and variables → Actions → Variables):
+#   PLAY_RELEASE_STATUS — e.g. draft. Required while the Play listing is still a “draft app”
+#   (Google only allows draft releases until the first production rollout). Omit or use
+#   completed once the app is no longer in that state (Fastlane default is completed).
 
 on:
   push:
@@ -41,6 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLAY_TRACK: ${{ inputs.track || 'internal' }}
+      PLAY_RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
