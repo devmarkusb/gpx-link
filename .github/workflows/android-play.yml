@@ -89,6 +89,15 @@ jobs:
           STORE_PW=$(printf '%s' "$ANDROID_KEYSTORE_PASSWORD" | tr -d '\r')
           KEY_PW=$(printf '%s' "$ANDROID_KEY_PASSWORD" | tr -d '\r')
           ALIAS=$(printf '%s' "$ANDROID_KEY_ALIAS" | tr -d '\r')
+          # PKCS12 (.p12 or .jks with DER header 30 82): one password only; keytool ignores a
+          # different -keypass but Gradle can still fail if keyPassword ≠ storePassword here.
+          head_two=$(head -c 2 upload-keystore.jks | xxd -p | tr -d '\n')
+          if [ "$head_two" = "3082" ]; then
+            if [ "$KEY_PW" != "$STORE_PW" ]; then
+              echo "::notice::PKCS12 keystore: keyPassword must equal storePassword; using ANDROID_KEYSTORE_PASSWORD for both."
+            fi
+            KEY_PW="$STORE_PW"
+          fi
           {
             echo "storeFile=upload-keystore.jks"
             echo "storePassword=$STORE_PW"
@@ -101,12 +110,19 @@ jobs:
         env:
           STORE_PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           STORE_PW=$(printf '%s' "$STORE_PW" | tr -d '\r')
           KEY_ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -d '\r')
-          if ! keytool -list -keystore upload-keystore.jks -storepass "$STORE_PW" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
-            echo "::error::keytool could not open the keystore or alias. Check ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and that ANDROID_KEYSTORE_BASE64 is the exact file you use locally (not truncated; GitHub secret max 48KB)."
-            keytool -list -keystore upload-keystore.jks -storepass "$STORE_PW" 2>&1 || true
+          KEY_PW=$(printf '%s' "$KEY_PW" | tr -d '\r')
+          head_two=$(head -c 2 upload-keystore.jks | xxd -p | tr -d '\n')
+          if [ "$head_two" = "3082" ]; then
+            KEY_PW="$STORE_PW"
+          fi
+          # JKS: wrong keyPassword fails here. PKCS12: only store password matters (keypass ignored by keytool).
+          if ! keytool -list -keystore upload-keystore.jks -storepass "$STORE_PW" -keypass "$KEY_PW" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error::keytool could not read the keystore or private key. Check ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEYSTORE_BASE64 (exact .jks; GitHub secret max 48KB — truncation corrupts the file)."
+            keytool -list -keystore upload-keystore.jks -storepass "$STORE_PW" -keypass "$KEY_PW" 2>&1 || true
             exit 1
           fi
 
