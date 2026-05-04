@@ -61,7 +61,8 @@ platform :android do
       json_key: json_path,
       aab: aab,
       skip_upload_apk: true,
-      metadata_path: File.join(__dir__, "metadata"),
+      # Anchor to ANDROID_DIR: __dir__ is "." while Fastfile is eval'd, so "./metadata" breaks after chdir back to android/.
+      metadata_path: File.join(ANDROID_DIR, "fastlane", "metadata", "android"),
     )
   end
 end
