@@ -27,5 +27,5 @@ def render(paths_json: str) -> str:
         warn_empty = not waypoints and not geo_paths
         html = build_leaflet_html(waypoints, geo_paths)
         return json.dumps({"ok": True, "html": html, "warn_empty": warn_empty})
-    except OSError as e:
+    except Exception as e:
         return json.dumps({"ok": False, "error": str(e)})
