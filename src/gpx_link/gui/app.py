@@ -24,12 +24,15 @@ def main(argv: list[str] | None = None) -> int:
         from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest
         from PySide6.QtWebEngineWidgets import QWebEngineView
         from PySide6.QtWidgets import (
+            QAbstractItemView,
             QApplication,
             QFileDialog,
+            QHBoxLayout,
             QListWidget,
             QListWidgetItem,
             QMainWindow,
             QMessageBox,
+            QPushButton,
             QSplitter,
             QToolBar,
             QVBoxLayout,
@@ -59,10 +62,39 @@ def main(argv: list[str] | None = None) -> int:
             self._web = QWebEngineView()
             self._file_list = QListWidget()
             self._file_list.setMinimumWidth(220)
+            self._file_list.setSelectionMode(
+                QAbstractItemView.SelectionMode.ExtendedSelection
+            )
             self._file_list.itemChanged.connect(self._on_file_item_changed)
 
+            file_panel = QWidget()
+            file_layout = QVBoxLayout(file_panel)
+            file_layout.setContentsMargins(0, 0, 0, 0)
+            file_layout.setSpacing(0)
+            btn_row = QWidget()
+            btn_layout = QHBoxLayout(btn_row)
+            btn_layout.setContentsMargins(4, 4, 4, 2)
+            sel_all = QPushButton("Select all")
+            sel_all.setToolTip("Check every GPX file (show all on the map)")
+            sel_all.clicked.connect(self._select_all_gpx_files)
+            btn_layout.addWidget(sel_all)
+            sel_none = QPushButton("Unselect all")
+            sel_none.setToolTip("Uncheck every GPX file (hide all from the map)")
+            sel_none.clicked.connect(self._unselect_all_gpx_files)
+            btn_layout.addWidget(sel_none)
+            del_btn = QPushButton("Delete")
+            del_btn.setToolTip(
+                "Remove selected rows from this list (click or Shift+click rows; "
+                "files on disk are not deleted)"
+            )
+            del_btn.clicked.connect(self._delete_selected_gpx_files)
+            btn_layout.addWidget(del_btn)
+            file_layout.addWidget(btn_row)
+            file_layout.addWidget(self._file_list, stretch=1)
+            self._file_panel = file_panel
+
             self._splitter = QSplitter()
-            self._splitter.addWidget(self._file_list)
+            self._splitter.addWidget(self._file_panel)
             self._splitter.addWidget(self._web)
             self._splitter.setStretchFactor(0, 0)
             self._splitter.setStretchFactor(1, 1)
@@ -118,8 +150,8 @@ def main(argv: list[str] | None = None) -> int:
             self._reload()
 
         def _persist_layout(self) -> None:
-            self._settings.setValue(_SHOW_FILE_PANEL_KEY, self._file_list.isVisible())
-            if self._file_list.isVisible():
+            self._settings.setValue(_SHOW_FILE_PANEL_KEY, self._file_panel.isVisible())
+            if self._file_panel.isVisible():
                 self._settings.setValue(_SPLITTER_STATE_KEY, self._splitter.saveState())
             self._persist_gpx_file_list()
 
@@ -183,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
                     it.setFlags(
                         it.flags()
                         | Qt.ItemFlag.ItemIsUserCheckable
+                        | Qt.ItemFlag.ItemIsSelectable
                         | Qt.ItemFlag.ItemIsEnabled
                     )
                     it.setCheckState(
@@ -204,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
             self._settings.setValue(_SHOW_FILE_PANEL_KEY, visible)
 
         def _apply_file_panel_visibility(self, visible: bool) -> None:
-            self._file_list.setVisible(visible)
+            self._file_panel.setVisible(visible)
             if visible and self._splitter.sizes()[0] == 0:
                 total = max(self._splitter.width(), 400)
                 left = min(280, total // 3)
@@ -290,6 +323,7 @@ def main(argv: list[str] | None = None) -> int:
                     it.setFlags(
                         it.flags()
                         | Qt.ItemFlag.ItemIsUserCheckable
+                        | Qt.ItemFlag.ItemIsSelectable
                         | Qt.ItemFlag.ItemIsEnabled
                     )
                     it.setCheckState(Qt.CheckState.Checked)
@@ -311,6 +345,47 @@ def main(argv: list[str] | None = None) -> int:
             return out
 
         def _on_file_item_changed(self, _item: QListWidgetItem) -> None:
+            self._persist_gpx_file_list()
+            self._reload()
+
+        def _set_all_file_check_states(self, state: Qt.CheckState) -> None:
+            self._file_list.blockSignals(True)
+            try:
+                for i in range(self._file_list.count()):
+                    self._file_list.item(i).setCheckState(state)
+            finally:
+                self._file_list.blockSignals(False)
+            self._persist_gpx_file_list()
+            self._reload()
+
+        def _select_all_gpx_files(self) -> None:
+            self._set_all_file_check_states(Qt.CheckState.Checked)
+
+        def _unselect_all_gpx_files(self) -> None:
+            self._set_all_file_check_states(Qt.CheckState.Unchecked)
+
+        def _delete_selected_gpx_files(self) -> None:
+            selected = self._file_list.selectedItems()
+            if not selected:
+                QMessageBox.information(
+                    self,
+                    "GPX Link",
+                    "Select one or more rows in the list (click or Shift+click), "
+                    "then click Delete.",
+                )
+                return
+            rows = sorted(
+                {self._file_list.row(i) for i in selected},
+                reverse=True,
+            )
+            self._file_list.blockSignals(True)
+            try:
+                for r in rows:
+                    if r >= 0:
+                        self._file_list.takeItem(r)
+            finally:
+                self._file_list.blockSignals(False)
+            self._prune_parse_cache()
             self._persist_gpx_file_list()
             self._reload()
 

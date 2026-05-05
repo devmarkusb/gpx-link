@@ -19,7 +19,9 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.MenuItem
 import android.view.View
+import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -40,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private val gpxItems = mutableListOf<GpxListItem>()
     private lateinit var webView: WebView
     private lateinit var fileList: RecyclerView
+    private lateinit var gpxListActions: View
     private lateinit var adapter: GpxFileAdapter
     private val importExecutor = Executors.newSingleThreadExecutor()
 
@@ -98,8 +101,9 @@ class MainActivity : AppCompatActivity() {
         toolbar.inflateMenu(R.menu.main)
 
         val panelVisible = savedInstanceState?.getBoolean(STATE_FILE_PANEL_VISIBLE, true) ?: true
+        gpxListActions = findViewById(R.id.gpx_list_actions)
         fileList = findViewById(R.id.file_list)
-        fileList.visibility = if (panelVisible) View.VISIBLE else View.GONE
+        setFilePanelVisible(panelVisible)
         toolbar.menu.findItem(R.id.action_toggle_file_list)?.isChecked = panelVisible
 
         toolbar.setOnMenuItemClickListener { item ->
@@ -118,7 +122,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 R.id.action_toggle_file_list -> {
                     val show = fileList.visibility != View.VISIBLE
-                    fileList.visibility = if (show) View.VISIBLE else View.GONE
+                    setFilePanelVisible(show)
                     item.isChecked = show
                     true
                 }
@@ -128,11 +132,19 @@ class MainActivity : AppCompatActivity() {
 
         fileList.layoutManager = LinearLayoutManager(this)
         loadPersistedGpxSelection()
-        adapter = GpxFileAdapter(gpxItems) {
-            persistGpxSelection()
-            reloadMap()
-        }
+        adapter =
+            GpxFileAdapter(
+                gpxItems,
+                onChanged = {
+                    persistGpxSelection()
+                    reloadMap()
+                },
+                onItemLongPress = { anchor, position -> showGpxRowDeleteMenu(anchor, position) },
+            )
         fileList.adapter = adapter
+
+        findViewById<View>(R.id.btn_select_all_gpx).setOnClickListener { selectAllGpx() }
+        findViewById<View>(R.id.btn_unselect_all_gpx).setOnClickListener { unselectAllGpx() }
 
         webView = findViewById(R.id.map_webview)
         setupWebView(webView)
@@ -155,6 +167,69 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(STATE_FILE_PANEL_VISIBLE, fileList.visibility == View.VISIBLE)
+    }
+
+    private fun setFilePanelVisible(visible: Boolean) {
+        val v = if (visible) View.VISIBLE else View.GONE
+        gpxListActions.visibility = v
+        fileList.visibility = v
+    }
+
+    private fun selectAllGpx() {
+        var changed = false
+        for (item in gpxItems) {
+            if (!item.checked) {
+                item.checked = true
+                changed = true
+            }
+        }
+        if (!changed) return
+        adapter.notifyDataSetChanged()
+        persistGpxSelection()
+        reloadMap()
+    }
+
+    private fun unselectAllGpx() {
+        var changed = false
+        for (item in gpxItems) {
+            if (item.checked) {
+                item.checked = false
+                changed = true
+            }
+        }
+        if (!changed) return
+        adapter.notifyDataSetChanged()
+        persistGpxSelection()
+        reloadMap()
+    }
+
+    private fun showGpxRowDeleteMenu(anchor: View, position: Int) {
+        if (position !in gpxItems.indices) return
+        PopupMenu(this, anchor).apply {
+            menuInflater.inflate(R.menu.menu_gpx_row, menu)
+            setOnMenuItemClickListener { item: MenuItem ->
+                if (item.itemId == R.id.action_delete_gpx_row) {
+                    removeGpxItemAt(position)
+                    true
+                } else {
+                    false
+                }
+            }
+            show()
+        }
+    }
+
+    private fun removeGpxItemAt(position: Int) {
+        if (position !in gpxItems.indices) return
+        val removed = gpxItems.removeAt(position)
+        File(removed.cachePath).delete()
+        adapter.notifyItemRemoved(position)
+        val rest = gpxItems.size - position
+        if (rest > 0) {
+            adapter.notifyItemRangeChanged(position, rest)
+        }
+        persistGpxSelection()
+        reloadMap()
     }
 
     override fun onDestroy() {
