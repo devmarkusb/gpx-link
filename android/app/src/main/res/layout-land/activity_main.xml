@@ -18,20 +18,20 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:baselineAligned="false"
-        android:orientation="vertical">
+        android:orientation="horizontal">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/file_list"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
             android:layout_weight="35"
             android:clipToPadding="false"
             android:paddingTop="4dp"
             android:paddingBottom="4dp" />
 
         <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
             android:layout_weight="65">
 
             <WebView
