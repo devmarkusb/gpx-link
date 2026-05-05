@@ -167,7 +167,7 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for pre-commit and full setup.
 
 Version bumps and changelogs can be managed with **python-semantic-release** (see `pyproject.toml` and `CHANGELOG.md`). Publishing to PyPI expects your own Trusted Publisher and GitHub environment setup.
 
-Publishing the **Android** build to **Google Play** uses the **`Android Play release`** workflow (`.github/workflows/android-play.yml`): push a tag matching **`v*`** (for example after semantic-release tags a release), or run it manually from the Actions tab. Manual runs can enable **Push fastlane metadata to Play** to upload listing copy and graphics from **`android/fastlane/metadata/`** together with the **AAB**. See **[CONTRIBUTING.md — Android builds and Google Play](CONTRIBUTING.md#android-builds-and-google-play)** for secrets, keystores, the Fastlane file map, and the Play Console checklist.
+Publishing the **Android** build to **Google Play** uses the **`Android Play release`** workflow (`.github/workflows/android-play.yml`): after **semantic-release** on **`main`** it is started automatically from the **Release** workflow, or you can push a **`v*`** tag / run the workflow manually from the Actions tab. Manual runs can enable **Push fastlane metadata to Play** to upload listing copy and graphics from **`android/fastlane/metadata/`** together with the **AAB**. See **[CONTRIBUTING.md — Android builds and Google Play](CONTRIBUTING.md#android-builds-and-google-play)** for secrets, keystores, the Fastlane file map, and the Play Console checklist.
 
 ## License
 
