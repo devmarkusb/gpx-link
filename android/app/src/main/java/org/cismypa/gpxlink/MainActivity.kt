@@ -33,7 +33,6 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
@@ -41,8 +40,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var fileList: RecyclerView
     private lateinit var adapter: GpxFileAdapter
-
-    private val mapRenderExecutor = Executors.newSingleThreadExecutor()
 
     private val locationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -67,7 +64,9 @@ class MainActivity : AppCompatActivity() {
                     gpxItems.add(GpxListItem(displayName = name, cachePath = path, checked = true))
                     index++
                 } catch (e: Exception) {
-                    Toast.makeText(this, e.message ?: "Import failed", Toast.LENGTH_LONG).show()
+                    val msg = e.message?.trim()?.takeIf { it.isNotEmpty() }
+                    val text = msg ?: e.javaClass.simpleName.ifEmpty { "Import failed" }
+                    Toast.makeText(this, text, Toast.LENGTH_LONG).show()
                 }
             }
             adapter.notifyDataSetChanged()
@@ -139,11 +138,6 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
-    }
-
-    override fun onDestroy() {
-        mapRenderExecutor.shutdownNow()
-        super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -230,53 +224,46 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderAndLoad(paths: List<String>) {
-        val pathsJsonSnapshot = JSONArray(paths).toString()
-        mapRenderExecutor.execute {
-            val jsonResult: String =
-                try {
-                    val py = Python.getInstance()
-                    val module = py.getModule("bridge")
-                    module.callAttr("render", pathsJsonSnapshot).toString()
-                } catch (e: Throwable) {
-                    runOnUiThread {
-                        Toast.makeText(
-                            this,
-                            e.message ?: getString(R.string.gpx_parse_error),
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                    return@execute
-                }
-            runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
-                val obj =
-                    try {
-                        JSONObject(jsonResult)
-                    } catch (_: Exception) {
-                        Toast.makeText(this, R.string.gpx_parse_error, Toast.LENGTH_LONG).show()
-                        return@runOnUiThread
-                    }
-                if (!obj.optBoolean("ok", false)) {
-                    Toast.makeText(
-                        this,
-                        obj.optString("error", getString(R.string.gpx_parse_error)),
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    return@runOnUiThread
-                }
-                if (obj.optBoolean("warn_empty", false)) {
-                    Toast.makeText(this, R.string.gpx_empty_features, Toast.LENGTH_LONG).show()
-                }
-                val html = obj.getString("html")
-                webView.loadDataWithBaseURL(
-                    "https://cdn.jsdelivr.net/",
-                    html,
-                    "text/html",
-                    "UTF-8",
-                    null,
-                )
+        val pathsJson = JSONArray(paths).toString()
+        val jsonResult: String =
+            try {
+                val py = Python.getInstance()
+                val module = py.getModule("bridge")
+                module.callAttr("render", pathsJson).toString()
+            } catch (e: Throwable) {
+                Toast.makeText(
+                    this,
+                    e.message ?: getString(R.string.gpx_parse_error),
+                    Toast.LENGTH_LONG,
+                ).show()
+                return
             }
+        val obj =
+            try {
+                JSONObject(jsonResult)
+            } catch (_: Exception) {
+                Toast.makeText(this, R.string.gpx_parse_error, Toast.LENGTH_LONG).show()
+                return
+            }
+        if (!obj.optBoolean("ok", false)) {
+            Toast.makeText(
+                this,
+                obj.optString("error", getString(R.string.gpx_parse_error)),
+                Toast.LENGTH_LONG,
+            ).show()
+            return
         }
+        if (obj.optBoolean("warn_empty", false)) {
+            Toast.makeText(this, R.string.gpx_empty_features, Toast.LENGTH_LONG).show()
+        }
+        val html = obj.getString("html")
+        webView.loadDataWithBaseURL(
+            "https://cdn.jsdelivr.net/",
+            html,
+            "text/html",
+            "UTF-8",
+            null,
+        )
     }
 
     private fun copyUriToCache(uri: Uri, index: Int): String {
