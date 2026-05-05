@@ -33,6 +33,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var fileList: RecyclerView
     private lateinit var adapter: GpxFileAdapter
+    private val importExecutor = Executors.newSingleThreadExecutor()
 
     private val locationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -56,22 +58,32 @@ class MainActivity : AppCompatActivity() {
     private val openGpxLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isEmpty()) return@registerForActivityResult
-            var index = 0
-            for (uri in uris) {
-                try {
-                    val path = copyUriToCache(uri, index)
-                    val name = queryDisplayName(uri) ?: File(path).name
-                    gpxItems.add(GpxListItem(displayName = name, cachePath = path, checked = true))
-                    index++
-                } catch (e: Exception) {
-                    val msg = e.message?.trim()?.takeIf { it.isNotEmpty() }
-                    val text = msg ?: e.javaClass.simpleName.ifEmpty { "Import failed" }
-                    Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+            val uriSnapshot = uris.toList()
+            importExecutor.execute {
+                val imported = mutableListOf<GpxListItem>()
+                val errors = mutableListOf<String>()
+                var index = 0
+                for (uri in uriSnapshot) {
+                    try {
+                        val path = copyUriToCache(uri, index)
+                        val name = queryDisplayName(uri) ?: File(path).name
+                        imported.add(GpxListItem(displayName = name, cachePath = path, checked = true))
+                        index++
+                    } catch (e: Exception) {
+                        errors.add(readableError(e))
+                    }
+                }
+                runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
+                    gpxItems.addAll(imported)
+                    for (text in errors) {
+                        Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+                    }
+                    adapter.notifyDataSetChanged()
+                    persistGpxSelection()
+                    reloadMap()
                 }
             }
-            adapter.notifyDataSetChanged()
-            persistGpxSelection()
-            reloadMap()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -143,6 +155,11 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(STATE_FILE_PANEL_VISIBLE, fileList.visibility == View.VISIBLE)
+    }
+
+    override fun onDestroy() {
+        importExecutor.shutdownNow()
+        super.onDestroy()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -287,6 +304,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return uri.lastPathSegment
+    }
+
+    private fun readableError(error: Throwable): String {
+        val msg = error.message?.trim()?.takeIf { it.isNotEmpty() }
+        return msg ?: error.javaClass.simpleName.ifEmpty { "Import failed" }
     }
 
     private fun hasLocationPermission(): Boolean =
