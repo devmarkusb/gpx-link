@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -42,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     _LAST_OPEN_DIR_KEY = "last_open_gpx_directory"
     _SHOW_FILE_PANEL_KEY = "show_file_panel"
     _SPLITTER_STATE_KEY = "main_splitter_state"
+    _GPX_FILE_LIST_KEY = "gpx_file_list_v1"
 
     class MainWindow(QMainWindow):
         def __init__(self, initial_paths: list[Path]) -> None:
@@ -92,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
             self.addToolBar(tb)
             self._apply_file_panel_visibility(show_panel)
 
+            self._restore_gpx_file_list_from_settings()
             self._add_paths_to_list(initial_paths)
             self._reload()
 
@@ -99,6 +102,77 @@ def main(argv: list[str] | None = None) -> int:
             self._settings.setValue(_SHOW_FILE_PANEL_KEY, self._file_list.isVisible())
             if self._file_list.isVisible():
                 self._settings.setValue(_SPLITTER_STATE_KEY, self._splitter.saveState())
+            self._persist_gpx_file_list()
+
+        def _persist_gpx_file_list(self) -> None:
+            entries: list[dict[str, object]] = []
+            for i in range(self._file_list.count()):
+                item = self._file_list.item(i)
+                data = item.data(Qt.ItemDataRole.UserRole)
+                if not isinstance(data, str):
+                    continue
+                entries.append(
+                    {
+                        "path": data,
+                        "checked": item.checkState() == Qt.CheckState.Checked,
+                    }
+                )
+            self._settings.setValue(_GPX_FILE_LIST_KEY, json.dumps(entries))
+
+        def _restore_gpx_file_list_from_settings(self) -> None:
+            raw = self._settings.value(_GPX_FILE_LIST_KEY, "")
+            if not isinstance(raw, str) or not raw.strip():
+                return
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                return
+            if not isinstance(data, list):
+                return
+            self._file_list.blockSignals(True)
+            try:
+                for entry in data:
+                    if isinstance(entry, str):
+                        path_obj = Path(entry).expanduser()
+                        chk = True
+                    elif isinstance(entry, dict):
+                        p = entry.get("path")
+                        if not isinstance(p, str):
+                            continue
+                        path_obj = Path(p).expanduser()
+                        c = entry.get("checked", True)
+                        chk = (
+                            c
+                            if isinstance(c, bool)
+                            else str(c).lower()
+                            in (
+                                "true",
+                                "1",
+                                "yes",
+                            )
+                        )
+                    else:
+                        continue
+                    if not path_obj.is_file():
+                        continue
+                    resolved = path_obj.resolve()
+                    key = str(resolved)
+                    if key in self._paths_in_list():
+                        continue
+                    it = QListWidgetItem(resolved.name)
+                    it.setData(Qt.ItemDataRole.UserRole, key)
+                    it.setFlags(
+                        it.flags()
+                        | Qt.ItemFlag.ItemIsUserCheckable
+                        | Qt.ItemFlag.ItemIsEnabled
+                    )
+                    it.setCheckState(
+                        Qt.CheckState.Checked if chk else Qt.CheckState.Unchecked
+                    )
+                    it.setToolTip(key)
+                    self._file_list.addItem(it)
+            finally:
+                self._file_list.blockSignals(False)
 
         def _on_file_panel_toggled(self, visible: bool) -> None:
             if not visible:
@@ -162,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
                     self._file_list.addItem(it)
             finally:
                 self._file_list.blockSignals(False)
+            self._persist_gpx_file_list()
 
         def _checked_paths(self) -> list[Path]:
             out: list[Path] = []
@@ -175,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
             return out
 
         def _on_file_item_changed(self, _item: QListWidgetItem) -> None:
+            self._persist_gpx_file_list()
             self._reload()
 
         def _open_files(self) -> None:

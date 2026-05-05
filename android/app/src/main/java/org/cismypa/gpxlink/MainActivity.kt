@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             adapter.notifyDataSetChanged()
+            persistGpxSelection()
             reloadMap()
         }
 
@@ -115,12 +116,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         fileList.layoutManager = LinearLayoutManager(this)
-        adapter = GpxFileAdapter(gpxItems) { reloadMap() }
+        loadPersistedGpxSelection()
+        adapter = GpxFileAdapter(gpxItems) {
+            persistGpxSelection()
+            reloadMap()
+        }
         fileList.adapter = adapter
 
         webView = findViewById(R.id.map_webview)
         setupWebView(webView)
-        loadEmptyMap()
+        reloadMap()
 
         findViewById<FloatingActionButton>(R.id.fab_my_location).setOnClickListener {
             if (hasLocationPermission()) {
@@ -181,8 +186,41 @@ class MainActivity : AppCompatActivity() {
         wv.webViewClient = WebViewClient()
     }
 
-    private fun loadEmptyMap() {
-        renderAndLoad(emptyList())
+    private fun persistGpxSelection() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val arr = JSONArray()
+        for (item in gpxItems) {
+            arr.put(
+                JSONObject().apply {
+                    put("displayName", item.displayName)
+                    put("cachePath", item.cachePath)
+                    put("checked", item.checked)
+                },
+            )
+        }
+        prefs.edit().putString(KEY_GPX_ITEMS, arr.toString()).apply()
+    }
+
+    private fun loadPersistedGpxSelection() {
+        val raw = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_GPX_ITEMS, null)
+            ?: return
+        val arr =
+            try {
+                JSONArray(raw)
+            } catch (_: Exception) {
+                return
+            }
+        gpxItems.clear()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val displayName = o.optString("displayName", "")
+            val cachePath = o.optString("cachePath", "")
+            val checked = o.optBoolean("checked", true)
+            if (cachePath.isEmpty()) continue
+            if (!File(cachePath).isFile()) continue
+            val label = displayName.ifEmpty { File(cachePath).name }
+            gpxItems.add(GpxListItem(displayName = label, cachePath = cachePath, checked = checked))
+        }
     }
 
     private fun checkedPaths(): List<String> = gpxItems.filter { it.checked }.map { it.cachePath }
@@ -357,5 +395,7 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val STATE_FILE_PANEL_VISIBLE = "file_panel_visible"
+        const val PREFS_NAME = "gpxlink"
+        const val KEY_GPX_ITEMS = "gpx_selection_v1"
     }
 }
