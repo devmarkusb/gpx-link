@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gpx_link.bounds import bounds_for_map, bounds_for_waypoints
+from gpx_link.bounds import (
+    bounds_for_map,
+    bounds_for_tracks_from_file,
+    bounds_for_waypoints,
+)
 from gpx_link.models import GeoPath, Waypoint
 
 
@@ -45,3 +49,14 @@ def test_bounds_for_paths_without_waypoints() -> None:
     assert b is not None
     assert b.min_lat == 1.0 and b.max_lat == 4.0
     assert b.min_lon == 2.0 and b.max_lon == 6.0
+
+
+def test_bounds_for_tracks_from_file_ignores_other_files_and_routes() -> None:
+    a = Path("/a.gpx")
+    b = Path("/b.gpx")
+    tracks_a = GeoPath(a, "T", "track", ((0.0, 0.0), (1.0, 1.0)))
+    route_a = GeoPath(a, "R", "route", ((5.0, 5.0), (6.0, 6.0)))
+    tracks_b = GeoPath(b, "T2", "track", ((10.0, 10.0), (11.0, 11.0)))
+    assert bounds_for_tracks_from_file(
+        [tracks_a, route_a, tracks_b], a
+    ) == bounds_for_map([], [tracks_a])

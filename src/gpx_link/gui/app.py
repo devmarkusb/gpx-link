@@ -4,8 +4,14 @@ import json
 import sys
 from pathlib import Path
 
-from gpx_link.html_map import build_leaflet_html
-from gpx_link.parser import load_map_features_from_paths
+from gpx_link.bounds import bounds_for_map
+from gpx_link.html_map import (
+    build_leaflet_map_shell_html,
+    build_map_js_payload,
+    map_js_payload_literal,
+)
+from gpx_link.models import GeoPath, Waypoint
+from gpx_link.parser import load_map_features_from_paths_cached
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,6 +76,14 @@ def main(argv: list[str] | None = None) -> int:
 
             tb = QToolBar()
             tb.addAction("Open GPX…", self._open_files)
+            fit_act = QAction("Fit to route", self)
+            fit_act.setShortcut(QKeySequence("Ctrl+Shift+F"))
+            fit_act.setToolTip(
+                "Zoom the map to show all data in the current selection "
+                "(shortcut: Ctrl+Shift+F)"
+            )
+            fit_act.triggered.connect(self._fit_map_to_visible_route)
+            tb.addAction(fit_act)
             self._action_file_panel = QAction("GPX file list", self)
             self._action_file_panel.setCheckable(True)
             self._action_file_panel.setShortcut(QKeySequence("Ctrl+Shift+L"))
@@ -96,6 +110,11 @@ def main(argv: list[str] | None = None) -> int:
 
             self._restore_gpx_file_list_from_settings()
             self._add_paths_to_list(initial_paths)
+            self._map_shell_ready = False
+            self._awaiting_shell_load = False
+            self._pending_map_payload: dict[str, object] | None = None
+            self._parse_cache: dict[str, tuple[int, list[Waypoint], list[GeoPath]]] = {}
+            self._last_map_view: tuple[float, float, int] | None = None
             self._reload()
 
         def _persist_layout(self) -> None:
@@ -214,6 +233,48 @@ def main(argv: list[str] | None = None) -> int:
                     seen.add(data)
             return seen
 
+        def _prune_parse_cache(self) -> None:
+            keep = self._paths_in_list()
+            for key in list(self._parse_cache):
+                if key not in keep:
+                    del self._parse_cache[key]
+
+        def _store_map_view(self, result: object) -> None:
+            if isinstance(result, list) and len(result) >= 3:
+                try:
+                    self._last_map_view = (
+                        float(result[0]),
+                        float(result[1]),
+                        int(round(float(result[2]))),
+                    )
+                except (TypeError, ValueError):
+                    pass
+
+        def _apply_map_js_payload(self, payload: dict[str, object]) -> None:
+            lit = map_js_payload_literal(payload)
+            js = (
+                "(function(){ gpxLinkApplyPayload("
+                + lit
+                + "); var c = map.getCenter(); "
+                "return [c.lat, c.lng, map.getZoom()]; })()"
+            )
+            self._web.page().runJavaScript(js, self._store_map_view)
+
+        def _on_map_shell_load_finished(self, ok: bool) -> None:
+            try:
+                self._web.loadFinished.disconnect(self._on_map_shell_load_finished)
+            except TypeError:
+                pass
+            self._awaiting_shell_load = False
+            if ok:
+                self._map_shell_ready = True
+                if self._pending_map_payload is not None:
+                    p = self._pending_map_payload
+                    self._pending_map_payload = None
+                    self._apply_map_js_payload(p)
+            else:
+                self._map_shell_ready = False
+
         def _add_paths_to_list(self, paths: list[Path]) -> None:
             self._file_list.blockSignals(True)
             try:
@@ -273,26 +334,88 @@ def main(argv: list[str] | None = None) -> int:
             if url.isValid() and url.scheme() in ("http", "https"):
                 QDesktopServices.openUrl(url)
 
-        def _reload(self) -> None:
+        def _fit_map_to_visible_route(self) -> None:
+            if not self._map_shell_ready:
+                return
             paths = self._checked_paths()
             if not paths:
-                html = build_leaflet_html([])
-                self._web.setHtml(html, QUrl("https://cdn.jsdelivr.net/"))
+                QMessageBox.information(
+                    self,
+                    "GPX Link",
+                    "Select at least one GPX file to fit the map.",
+                )
                 return
             try:
-                wpts, geopaths = load_map_features_from_paths(paths)
+                wpts, geopaths = load_map_features_from_paths_cached(
+                    paths, self._parse_cache
+                )
             except OSError as e:
                 QMessageBox.warning(self, "GPX", str(e))
                 return
-            if not wpts and not geopaths:
-                msg = (
-                    "No waypoints, track points, or route points found "
-                    "in the selected file(s)."
+            b = bounds_for_map(wpts, geopaths)
+            if b is None:
+                QMessageBox.information(
+                    self,
+                    "GPX Link",
+                    "No coordinates in the current selection to fit the map.",
                 )
-                QMessageBox.information(self, "GPX", msg)
-            html = build_leaflet_html(wpts, geopaths)
-            self._web.setHtml(html, QUrl("https://cdn.jsdelivr.net/"))
-            self._save_last_directory(paths[0])
+                return
+            padded = b.padded()
+            corners: list[list[float]] = [
+                [padded.min_lat, padded.min_lon],
+                [padded.max_lat, padded.max_lon],
+            ]
+            lit = json.dumps(corners, separators=(",", ":")).replace("<", "\\u003c")
+            js = (
+                "(function(){ map.fitBounds(" + lit + "); var c = map.getCenter(); "
+                "return [c.lat, c.lng, map.getZoom()]; })()"
+            )
+            self._web.page().runJavaScript(js, self._store_map_view)
+
+        def _reload(self) -> None:
+            self._prune_parse_cache()
+            paths = self._checked_paths()
+            if not paths:
+                payload = build_map_js_payload(
+                    [],
+                    [],
+                    fit_padded_bounds=None,
+                    map_center_and_zoom=self._last_map_view,
+                )
+            else:
+                try:
+                    wpts, geopaths = load_map_features_from_paths_cached(
+                        paths, self._parse_cache
+                    )
+                except OSError as e:
+                    QMessageBox.warning(self, "GPX", str(e))
+                    return
+                if not wpts and not geopaths:
+                    msg = (
+                        "No waypoints, track points, or route points found "
+                        "in the selected file(s)."
+                    )
+                    QMessageBox.information(self, "GPX", msg)
+                payload = build_map_js_payload(
+                    wpts,
+                    geopaths,
+                    fit_padded_bounds=None,
+                    map_center_and_zoom=self._last_map_view,
+                )
+                self._save_last_directory(paths[0])
+
+            if not self._map_shell_ready:
+                self._pending_map_payload = payload
+                if not self._awaiting_shell_load:
+                    self._awaiting_shell_load = True
+                    self._web.loadFinished.connect(self._on_map_shell_load_finished)
+                    self._web.setHtml(
+                        build_leaflet_map_shell_html(),
+                        QUrl("https://cdn.jsdelivr.net/"),
+                    )
+                return
+
+            self._apply_map_js_payload(payload)
 
     # Do not pass GPX paths as Qt arguments; only the real process argv.
     app = QApplication(sys.argv)

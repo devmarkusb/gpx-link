@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from gpx_link.models import GeoPath, Waypoint
 
 # Minimum span so a single point still gets a sensible zoom (degrees).
 _MIN_SPAN_DEG = 0.002
-_DEFAULT_PAD_RATIO = 0.12
+# Fraction of lat/lon span added on each side before map fit (smaller = tighter crop).
+_DEFAULT_PAD_RATIO = 0.04
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +34,15 @@ class Bounds:
 def bounds_for_waypoints(waypoints: list[Waypoint]) -> Bounds | None:
     """Return axis-aligned bounds for all waypoints, or None if empty."""
     return bounds_for_map(waypoints, [])
+
+
+def bounds_for_tracks_from_file(paths: list[GeoPath], source: Path) -> Bounds | None:
+    """Bounds for ``kind == track`` segments originating from ``source`` only."""
+    resolved = source.resolve()
+    tracks = [
+        p for p in paths if p.kind == "track" and p.source_path.resolve() == resolved
+    ]
+    return bounds_for_map([], tracks)
 
 
 def bounds_for_map(
