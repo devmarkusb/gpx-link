@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,27 @@ def load_map_features_from_paths(
     geo_paths: list[GeoPath] = []
     for path in paths:
         w, g = _load_one(path)
+        waypoints.extend(w)
+        geo_paths.extend(g)
+    return waypoints, geo_paths
+
+
+def load_map_features_from_paths_cached(
+    paths: list[Path],
+    cache: MutableMapping[str, tuple[int, list[Waypoint], list[GeoPath]]],
+) -> tuple[list[Waypoint], list[GeoPath]]:
+    """Parse like ``load_map_features_from_paths`` with per-file mtime cache hits."""
+    waypoints: list[Waypoint] = []
+    geo_paths: list[GeoPath] = []
+    for path in paths:
+        key = str(path.resolve())
+        mtime_ns = path.stat().st_mtime_ns
+        hit = cache.get(key)
+        if hit is not None and hit[0] == mtime_ns:
+            w, g = hit[1], hit[2]
+        else:
+            w, g = _load_one(path)
+            cache[key] = (mtime_ns, w, g)
         waypoints.extend(w)
         geo_paths.extend(g)
     return waypoints, geo_paths
