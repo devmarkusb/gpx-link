@@ -14,4 +14,17 @@
     <string name="location_provider_disabled">Turn on location (GPS or network) to find your position.</string>
     <string name="location_searching">Getting location…</string>
     <string name="location_error">Could not read your location.</string>
+    <string name="menu_project_cd">Project menu</string>
+    <string name="project_new">New</string>
+    <string name="project_save">Save…</string>
+    <string name="project_load">Load…</string>
+    <string name="project_new_confirm">Clear all GPX files from this session?</string>
+    <string name="project_replace_confirm">Replace the current GPX list with this project?</string>
+    <string name="project_saved">Project saved</string>
+    <string name="project_save_failed">Could not save project</string>
+    <string name="project_load_failed">Could not load project</string>
+    <string name="project_invalid">This file is not a GPX Link project.</string>
+    <string name="project_version">Unsupported project file version.</string>
+    <string name="project_no_files">Project file has no file list.</string>
+    <string name="project_missing_paths">Some paths were skipped (file not found).</string>
 </resources>

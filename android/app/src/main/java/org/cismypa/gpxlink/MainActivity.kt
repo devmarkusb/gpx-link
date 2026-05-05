@@ -19,6 +19,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.Gravity
 import android.view.MenuItem
 import android.view.View
 import android.widget.PopupMenu
@@ -31,15 +32,19 @@ import androidx.recyclerview.widget.RecyclerView
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
+import java.io.OutputStreamWriter
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
     private val gpxItems = mutableListOf<GpxListItem>()
+    private lateinit var toolbar: MaterialToolbar
     private lateinit var webView: WebView
     private lateinit var fileList: RecyclerView
     private lateinit var gpxListActions: View
@@ -89,6 +94,70 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    private val saveProjectLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri == null) return@registerForActivityResult
+            try {
+                contentResolver.openOutputStream(uri)?.use { os ->
+                    OutputStreamWriter(os, Charsets.UTF_8).use { w ->
+                        w.write(buildProjectJson())
+                    }
+                } ?: error("no output stream")
+                Toast.makeText(this, R.string.project_saved, Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this,
+                    e.message ?: getString(R.string.project_save_failed),
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+
+    private val loadProjectLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            val text =
+                try {
+                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        this,
+                        e.message ?: getString(R.string.project_load_failed),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    null
+                }
+            if (text == null) return@registerForActivityResult
+            try {
+                val data = JSONObject(text)
+                if (data.optString("format") != PROJECT_FORMAT) {
+                    Toast.makeText(this, R.string.project_invalid, Toast.LENGTH_LONG).show()
+                    return@registerForActivityResult
+                }
+                if (data.optInt("version") != PROJECT_VERSION) {
+                    Toast.makeText(this, R.string.project_version, Toast.LENGTH_LONG).show()
+                    return@registerForActivityResult
+                }
+                val files = data.optJSONArray("files")
+                if (files == null) {
+                    Toast.makeText(this, R.string.project_no_files, Toast.LENGTH_LONG).show()
+                    return@registerForActivityResult
+                }
+                val applyNow = { applyLoadedProject(data, files) }
+                if (gpxItems.isNotEmpty()) {
+                    MaterialAlertDialogBuilder(this)
+                        .setMessage(R.string.project_replace_confirm)
+                        .setPositiveButton(android.R.string.ok) { _, _ -> applyNow() }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                } else {
+                    applyNow()
+                }
+            } catch (_: JSONException) {
+                Toast.makeText(this, R.string.project_invalid, Toast.LENGTH_LONG).show()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -97,8 +166,11 @@ class MainActivity : AppCompatActivity() {
             Python.start(AndroidPlatform(application))
         }
 
-        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
+        toolbar = findViewById(R.id.toolbar)
         toolbar.inflateMenu(R.menu.main)
+        toolbar.navigationIcon = ContextCompat.getDrawable(this, R.drawable.ic_menu_hamburger_24)
+        toolbar.setNavigationContentDescription(R.string.menu_project_cd)
+        toolbar.setNavigationOnClickListener { showProjectMenu() }
 
         val panelVisible = savedInstanceState?.getBoolean(STATE_FILE_PANEL_VISIBLE, true) ?: true
         gpxListActions = findViewById(R.id.gpx_list_actions)
@@ -173,6 +245,106 @@ class MainActivity : AppCompatActivity() {
         val v = if (visible) View.VISIBLE else View.GONE
         gpxListActions.visibility = v
         fileList.visibility = v
+    }
+
+    private fun showProjectMenu() {
+        PopupMenu(this, toolbar, Gravity.START).apply {
+            menuInflater.inflate(R.menu.menu_project, menu)
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.action_project_new -> {
+                        promptNewProject()
+                        true
+                    }
+                    R.id.action_project_save -> {
+                        saveProjectLauncher.launch("project.gpxlink.json")
+                        true
+                    }
+                    R.id.action_project_load -> {
+                        loadProjectLauncher.launch(
+                            arrayOf("application/json", "application/*", "*/*"),
+                        )
+                        true
+                    }
+                    else -> false
+                }
+            }
+            show()
+        }
+    }
+
+    private fun promptNewProject() {
+        if (gpxItems.isEmpty()) {
+            reloadMap()
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setMessage(R.string.project_new_confirm)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                for (item in gpxItems) {
+                    File(item.cachePath).delete()
+                }
+                gpxItems.clear()
+                adapter.notifyDataSetChanged()
+                persistGpxSelection()
+                reloadMap()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun buildProjectJson(): String {
+        val files = JSONArray()
+        for (item in gpxItems) {
+            files.put(
+                JSONObject().apply {
+                    put("path", item.cachePath)
+                    put("checked", item.checked)
+                    put("label", item.displayName)
+                },
+            )
+        }
+        return JSONObject()
+            .apply {
+                put("format", PROJECT_FORMAT)
+                put("version", PROJECT_VERSION)
+                put("show_file_panel", fileList.visibility == View.VISIBLE)
+                put("map_view", JSONObject.NULL)
+                put("splitter_state_b64", JSONObject.NULL)
+                put("files", files)
+            }
+            .toString(2) + "\n"
+    }
+
+    private fun applyLoadedProject(root: JSONObject, files: JSONArray) {
+        for (item in gpxItems) {
+            File(item.cachePath).delete()
+        }
+        gpxItems.clear()
+        var skipped = 0
+        for (i in 0 until files.length()) {
+            val o = files.optJSONObject(i) ?: continue
+            val pathStr = o.optString("path", "")
+            if (pathStr.isEmpty()) continue
+            val f = File(pathStr)
+            if (!f.isFile()) {
+                skipped++
+                continue
+            }
+            val checked = o.optBoolean("checked", true)
+            val labelRaw = o.optString("label", "")
+            val label = labelRaw.ifBlank { f.name }
+            gpxItems.add(GpxListItem(displayName = label, cachePath = pathStr, checked = checked))
+        }
+        adapter.notifyDataSetChanged()
+        val showPanel = root.optBoolean("show_file_panel", true)
+        setFilePanelVisible(showPanel)
+        toolbar.menu.findItem(R.id.action_toggle_file_list)?.isChecked = showPanel
+        persistGpxSelection()
+        reloadMap()
+        if (skipped > 0) {
+            Toast.makeText(this, R.string.project_missing_paths, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun selectAllGpx() {
@@ -481,5 +653,7 @@ class MainActivity : AppCompatActivity() {
         const val STATE_FILE_PANEL_VISIBLE = "file_panel_visible"
         const val PREFS_NAME = "gpxlink"
         const val KEY_GPX_ITEMS = "gpx_selection_v1"
+        const val PROJECT_FORMAT = "gpx-link-project"
+        const val PROJECT_VERSION = 1
     }
 }

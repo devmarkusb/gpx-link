@@ -31,10 +31,12 @@ def main(argv: list[str] | None = None) -> int:
             QListWidget,
             QListWidgetItem,
             QMainWindow,
+            QMenu,
             QMessageBox,
             QPushButton,
             QSplitter,
             QToolBar,
+            QToolButton,
             QVBoxLayout,
             QWidget,
         )
@@ -53,6 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     _SHOW_FILE_PANEL_KEY = "show_file_panel"
     _SPLITTER_STATE_KEY = "main_splitter_state"
     _GPX_FILE_LIST_KEY = "gpx_file_list_v1"
+    _PROJECT_FORMAT = "gpx-link-project"
+    _PROJECT_VERSION = 1
+    _PROJECT_FILTER = "GPX Link project (*.gpxlink.json);;All files (*)"
 
     class MainWindow(QMainWindow):
         def __init__(self, initial_paths: list[Path]) -> None:
@@ -107,6 +112,16 @@ def main(argv: list[str] | None = None) -> int:
             self._web.page().newWindowRequested.connect(self._on_new_window_requested)
 
             tb = QToolBar()
+            project_menu = QMenu(self)
+            project_menu.addAction("New", self._new_project)
+            project_menu.addAction("Save…", self._save_project)
+            project_menu.addAction("Load…", self._load_project)
+            menu_btn = QToolButton(self)
+            menu_btn.setText("☰")
+            menu_btn.setToolTip("New, save, or load a project")
+            menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            menu_btn.setMenu(project_menu)
+            tb.addWidget(menu_btn)
             tb.addAction("Open GPX…", self._open_files)
             fit_act = QAction("Fit to route", self)
             fit_act.setShortcut(QKeySequence("Ctrl+Shift+F"))
@@ -401,6 +416,231 @@ def main(argv: list[str] | None = None) -> int:
                 self._add_paths_to_list(resolved)
                 self._save_last_directory(resolved[0])
                 self._reload()
+
+        def _clear_gpx_file_list(self) -> None:
+            self._file_list.blockSignals(True)
+            try:
+                self._file_list.clear()
+            finally:
+                self._file_list.blockSignals(False)
+            self._parse_cache.clear()
+            self._last_map_view = None
+            self._persist_gpx_file_list()
+
+        def _new_project(self) -> None:
+            if self._file_list.count() > 0:
+                r = QMessageBox.question(
+                    self,
+                    "GPX Link",
+                    "Clear the GPX file list and start a new project?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if r != QMessageBox.StandardButton.Yes:
+                    return
+            self._clear_gpx_file_list()
+            self._reload()
+
+        def _project_dict(self) -> dict[str, object]:
+            files: list[dict[str, object]] = []
+            for i in range(self._file_list.count()):
+                item = self._file_list.item(i)
+                data = item.data(Qt.ItemDataRole.UserRole)
+                if not isinstance(data, str):
+                    continue
+                files.append(
+                    {
+                        "path": data,
+                        "checked": item.checkState() == Qt.CheckState.Checked,
+                        "label": item.text(),
+                    }
+                )
+            splitter_b64: str | None = None
+            if self._file_panel.isVisible():
+                st = self._splitter.saveState()
+                if not st.isEmpty():
+                    splitter_b64 = bytes(st.toBase64()).decode("ascii")
+            return {
+                "format": _PROJECT_FORMAT,
+                "version": _PROJECT_VERSION,
+                "show_file_panel": self._file_panel.isVisible(),
+                "map_view": list(self._last_map_view)
+                if self._last_map_view is not None
+                else None,
+                "splitter_state_b64": splitter_b64,
+                "files": files,
+            }
+
+        def _save_project(self) -> None:
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save project",
+                self._saved_open_directory(),
+                _PROJECT_FILTER,
+            )
+            if not path:
+                return
+            out = Path(path).expanduser()
+            if not str(out).lower().endswith(".gpxlink.json"):
+                out = out.with_suffix(".gpxlink.json")
+            try:
+                body = json.dumps(
+                    self._project_dict(),
+                    indent=2,
+                    ensure_ascii=False,
+                )
+                out.write_text(body + "\n", encoding="utf-8")
+            except OSError as e:
+                QMessageBox.warning(self, "GPX Link", str(e))
+                return
+            self._save_last_directory(out)
+
+        def _load_project(self) -> None:
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Load project",
+                self._saved_open_directory(),
+                _PROJECT_FILTER,
+            )
+            if not path:
+                return
+            src = Path(path).expanduser().resolve()
+            try:
+                raw = src.read_text(encoding="utf-8")
+            except OSError as e:
+                QMessageBox.warning(self, "GPX Link", str(e))
+                return
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as e:
+                QMessageBox.warning(self, "GPX Link", f"Invalid project file: {e}")
+                return
+            if not isinstance(data, dict):
+                QMessageBox.warning(self, "GPX Link", "Invalid project file.")
+                return
+            if data.get("format") != _PROJECT_FORMAT:
+                QMessageBox.warning(
+                    self,
+                    "GPX Link",
+                    "This file is not a GPX Link project.",
+                )
+                return
+            ver = data.get("version")
+            if not isinstance(ver, int) or ver != _PROJECT_VERSION:
+                QMessageBox.warning(
+                    self,
+                    "GPX Link",
+                    "Unsupported project file version.",
+                )
+                return
+            files_raw = data.get("files")
+            if not isinstance(files_raw, list):
+                QMessageBox.warning(self, "GPX Link", "Project file has no file list.")
+                return
+            if self._file_list.count() > 0:
+                r = QMessageBox.question(
+                    self,
+                    "GPX Link",
+                    "Replace the current GPX file list with this project?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if r != QMessageBox.StandardButton.Yes:
+                    return
+
+            self._clear_gpx_file_list()
+            missing: list[str] = []
+            to_add: list[tuple[Path, bool, str]] = []
+            for entry in files_raw:
+                if isinstance(entry, str):
+                    p = Path(entry).expanduser()
+                    chk, label = True, ""
+                elif isinstance(entry, dict):
+                    ps = entry.get("path")
+                    if not isinstance(ps, str):
+                        continue
+                    p = Path(ps).expanduser()
+                    c = entry.get("checked", True)
+                    chk = (
+                        c
+                        if isinstance(c, bool)
+                        else str(c).lower() in ("true", "1", "yes")
+                    )
+                    lab = entry.get("label")
+                    label = lab if isinstance(lab, str) else ""
+                else:
+                    continue
+                resolved = p.resolve()
+                if not resolved.is_file():
+                    missing.append(str(resolved))
+                    continue
+                name = label.strip() if label.strip() else resolved.name
+                to_add.append((resolved, chk, name))
+
+            self._file_list.blockSignals(True)
+            try:
+                for resolved, chk, name in to_add:
+                    key = str(resolved)
+                    it = QListWidgetItem(name)
+                    it.setData(Qt.ItemDataRole.UserRole, key)
+                    it.setFlags(
+                        it.flags()
+                        | Qt.ItemFlag.ItemIsUserCheckable
+                        | Qt.ItemFlag.ItemIsSelectable
+                        | Qt.ItemFlag.ItemIsEnabled
+                    )
+                    it.setCheckState(
+                        Qt.CheckState.Checked if chk else Qt.CheckState.Unchecked
+                    )
+                    it.setToolTip(key)
+                    self._file_list.addItem(it)
+            finally:
+                self._file_list.blockSignals(False)
+            self._persist_gpx_file_list()
+
+            show = data.get("show_file_panel", True)
+            show_panel = (
+                show
+                if isinstance(show, bool)
+                else str(show).lower() in ("true", "1", "yes")
+            )
+            self._action_file_panel.blockSignals(True)
+            try:
+                self._action_file_panel.setChecked(show_panel)
+            finally:
+                self._action_file_panel.blockSignals(False)
+            self._on_file_panel_toggled(show_panel)
+
+            b64 = data.get("splitter_state_b64")
+            if show_panel and isinstance(b64, str) and b64.strip():
+                restored = QByteArray.fromBase64(b64.strip().encode("ascii"))
+                if not restored.isEmpty():
+                    self._splitter.restoreState(restored)
+
+            mv = data.get("map_view")
+            if isinstance(mv, list) and len(mv) >= 3:
+                try:
+                    self._last_map_view = (
+                        float(mv[0]),
+                        float(mv[1]),
+                        int(round(float(mv[2]))),
+                    )
+                except (TypeError, ValueError):
+                    self._last_map_view = None
+            else:
+                self._last_map_view = None
+
+            self._save_last_directory(src)
+            self._reload()
+
+            if missing:
+                QMessageBox.information(
+                    self,
+                    "GPX Link",
+                    "Some paths in the project were skipped (file not found):\n"
+                    + "\n".join(missing[:12])
+                    + ("\n…" if len(missing) > 12 else ""),
+                )
 
         def _on_new_window_requested(self, request: QWebEngineNewWindowRequest) -> None:
             # Qt WebEngine does not spawn a real browser window for window.open();

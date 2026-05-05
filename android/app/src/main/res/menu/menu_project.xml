@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_project_new"
+        android:title="@string/project_new" />
+    <item
+        android:id="@+id/action_project_save"
+        android:title="@string/project_save" />
+    <item
+        android:id="@+id/action_project_load"
+        android:title="@string/project_load" />
+</menu>
