@@ -68,6 +68,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh workflow run android-play.yml \
+            --repo "${{ github.repository }}" \
             --ref "${{ needs.version.outputs.release_tag }}" \
             -f track=internal \
             -f upload_store_listing=false
