@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 class GpxFileAdapter(
     private val items: MutableList<GpxListItem>,
     private val onChanged: () -> Unit,
+    private val onItemLongPress: (anchor: View, position: Int) -> Unit,
 ) : RecyclerView.Adapter<GpxFileAdapter.VH>() {
 
     class VH(view: View) : RecyclerView.ViewHolder(view) {
@@ -33,6 +34,16 @@ class GpxFileAdapter(
                 onChanged()
             }
         }
+        val rowLongPress = View.OnLongClickListener {
+            val pos = holder.bindingAdapterPosition
+            if (pos != RecyclerView.NO_POSITION) {
+                onItemLongPress(holder.itemView, pos)
+            }
+            true
+        }
+        holder.itemView.setOnLongClickListener(rowLongPress)
+        holder.check.setOnLongClickListener(rowLongPress)
+        holder.label.setOnLongClickListener(rowLongPress)
     }
 
     override fun getItemCount(): Int = items.size
