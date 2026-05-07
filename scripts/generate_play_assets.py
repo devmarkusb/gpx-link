@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import shutil
 import sys
 from pathlib import Path
 
@@ -276,6 +277,17 @@ def main() -> int:
         p = SHOT_DIR / name
         im.save(p, "PNG", optimize=True)
         print(f"Wrote {p}")
+
+    # Play needs at least one 7" and one 10" tablet listing image.
+    # Supply maps sevenInchScreenshots / tenInchScreenshots folders to those slots.
+    first_phone = shots[0][0]
+    src = SHOT_DIR / first_phone
+    for sub in ("sevenInchScreenshots", "tenInchScreenshots"):
+        dest_dir = OUT_DIR / sub
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / first_phone
+        shutil.copy2(src, dest)
+        print(f"Wrote {dest} (same image as phone {first_phone} for {sub})")
 
     return 0
 
