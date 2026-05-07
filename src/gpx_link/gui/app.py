@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from gpx_link.bounds import bounds_for_map
@@ -19,7 +20,15 @@ def main(argv: list[str] | None = None) -> int:
     paths = [Path(a).expanduser().resolve() for a in path_args]
 
     try:
-        from PySide6.QtCore import QByteArray, QSettings, Qt, QUrl
+        from PySide6.QtCore import (
+            QByteArray,
+            QObject,
+            QSettings,
+            Qt,
+            QThread,
+            QUrl,
+            Signal,
+        )
         from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
         from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest
         from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -33,8 +42,10 @@ def main(argv: list[str] | None = None) -> int:
             QMainWindow,
             QMenu,
             QMessageBox,
+            QProgressBar,
             QPushButton,
             QSplitter,
+            QStatusBar,
             QToolBar,
             QToolButton,
             QVBoxLayout,
@@ -58,6 +69,33 @@ def main(argv: list[str] | None = None) -> int:
     _PROJECT_FORMAT = "gpx-link-project"
     _PROJECT_VERSION = 1
     _PROJECT_FILTER = "GPX Link project (*.gpxlink.json);;All files (*)"
+
+    class _ParseFeaturesWorker(QObject):
+        progress = Signal(int, int)
+        finished_ok = Signal(object, object, object)
+        failed = Signal(str)
+
+        def __init__(
+            self,
+            paths: list[Path],
+            cache_copy: dict[str, tuple[int, list[Waypoint], list[GeoPath]]],
+        ) -> None:
+            super().__init__()
+            self._paths = paths
+            self._cache = cache_copy
+
+        def do_work(self) -> None:
+            try:
+
+                def prog(done: int, total: int) -> None:
+                    self.progress.emit(done, total)
+
+                w, g = load_map_features_from_paths_cached(
+                    self._paths, self._cache, progress=prog
+                )
+                self.finished_ok.emit(w, g, self._cache)
+            except OSError as e:
+                self.failed.emit(str(e))
 
     class MainWindow(QMainWindow):
         def __init__(self, initial_paths: list[Path]) -> None:
@@ -153,6 +191,18 @@ def main(argv: list[str] | None = None) -> int:
             self._action_file_panel.toggled.connect(self._on_file_panel_toggled)
             tb.addAction(self._action_file_panel)
             self.addToolBar(tb)
+            sb = QStatusBar(self)
+            self.setStatusBar(sb)
+            _sb_prog = QProgressBar(self)
+            _sb_prog.setMinimumWidth(280)
+            _sb_prog.setMinimumHeight(14)
+            _sb_prog.setMinimum(0)
+            _sb_prog.setMaximum(1)
+            _sb_prog.setVisible(False)
+            _sb_prog.setTextVisible(True)
+            self._status_progress = _sb_prog
+            sb.addPermanentWidget(_sb_prog, stretch=1)
+
             self._apply_file_panel_visibility(show_panel)
 
             self._restore_gpx_file_list_from_settings()
@@ -162,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
             self._pending_map_payload: dict[str, object] | None = None
             self._parse_cache: dict[str, tuple[int, list[Waypoint], list[GeoPath]]] = {}
             self._last_map_view: tuple[float, float, int] | None = None
+            self._reload_gen = 0
+            self._fit_gen = 0
             self._reload()
 
         def _persist_layout(self) -> None:
@@ -287,6 +339,124 @@ def main(argv: list[str] | None = None) -> int:
                 if key not in keep:
                     del self._parse_cache[key]
 
+        def _hide_status_progress(self) -> None:
+            self._status_progress.hide()
+
+        def _show_status_progress_indeterminate(self, message: str) -> None:
+            self._status_progress.setRange(0, 0)
+            self._status_progress.setFormat(message)
+            self._status_progress.setTextVisible(True)
+            self._status_progress.show()
+
+        def _show_status_progress_determinate(
+            self,
+            total: int,
+            format_template: str,
+        ) -> None:
+            t = max(1, total)
+            self._status_progress.setRange(0, t)
+            self._status_progress.setValue(0)
+            self._status_progress.setFormat(format_template)
+            self._status_progress.setTextVisible(True)
+            self._status_progress.show()
+
+        def _run_parse_worker(
+            self,
+            paths: list[Path],
+            *,
+            is_cancelled: Callable[[], bool],
+            on_finished: Callable[[list[Waypoint], list[GeoPath]], None],
+        ) -> None:
+            thr = QThread(self)
+            cache_copy = dict(self._parse_cache)
+            worker = _ParseFeaturesWorker(paths, cache_copy)
+            worker.moveToThread(thr)
+
+            def on_progress(done: int, total: int) -> None:
+                if is_cancelled():
+                    return
+                mx = max(1, total)
+                self._status_progress.setMaximum(mx)
+                self._status_progress.setValue(min(done, mx))
+
+            def on_ok(wpts_o: object, geopaths_o: object, merged_o: object) -> None:
+                if is_cancelled():
+                    return
+                if (
+                    not isinstance(merged_o, dict)
+                    or not isinstance(wpts_o, list)
+                    or not isinstance(geopaths_o, list)
+                ):
+                    return
+                self._parse_cache.clear()
+                self._parse_cache.update(merged_o)
+                on_finished(wpts_o, geopaths_o)
+
+            def on_err(msg: str) -> None:
+                if is_cancelled():
+                    return
+                self._hide_status_progress()
+                QMessageBox.warning(self, "GPX", msg)
+
+            worker.progress.connect(on_progress)
+            worker.finished_ok.connect(on_ok)
+            worker.failed.connect(on_err)
+            worker.finished_ok.connect(thr.quit)
+            worker.failed.connect(thr.quit)
+            thr.started.connect(worker.do_work)
+            thr.finished.connect(worker.deleteLater)
+            thr.finished.connect(thr.deleteLater)
+            thr.start()
+
+        def _reload_after_parse_completed(
+            self,
+            reload_generation: int,
+            paths: list[Path],
+            wpts: list[Waypoint],
+            geopaths: list[GeoPath],
+        ) -> None:
+            if reload_generation != self._reload_gen:
+                return
+            if paths and not wpts and not geopaths:
+                msg = (
+                    "No waypoints, track points, or route points found "
+                    "in the selected file(s)."
+                )
+                QMessageBox.information(self, "GPX", msg)
+            payload = build_map_js_payload(
+                wpts,
+                geopaths,
+                fit_padded_bounds=None,
+                map_center_and_zoom=self._last_map_view,
+            )
+            if paths:
+                self._save_last_directory(paths[0])
+            self._deliver_reload_payload(reload_generation, payload)
+
+        def _deliver_reload_payload(
+            self, reload_generation: int, payload: dict[str, object]
+        ) -> None:
+            if reload_generation != self._reload_gen:
+                return
+            if not self._map_shell_ready:
+                self._pending_map_payload = payload
+                self._show_status_progress_indeterminate("Loading map…")
+                if not self._awaiting_shell_load:
+                    self._awaiting_shell_load = True
+                    self._web.loadFinished.connect(self._on_map_shell_load_finished)
+                    self._web.setHtml(
+                        build_leaflet_map_shell_html(),
+                        QUrl("https://cdn.jsdelivr.net/"),
+                    )
+                return
+            self._apply_map_js_payload(
+                payload,
+                when_done=lambda: (
+                    self._reload_gen == reload_generation
+                    and self._hide_status_progress()
+                ),
+            )
+
         def _store_map_view(self, result: object) -> None:
             if isinstance(result, list) and len(result) >= 3:
                 try:
@@ -298,7 +468,12 @@ def main(argv: list[str] | None = None) -> int:
                 except (TypeError, ValueError):
                     pass
 
-        def _apply_map_js_payload(self, payload: dict[str, object]) -> None:
+        def _apply_map_js_payload(
+            self,
+            payload: dict[str, object],
+            *,
+            when_done: Callable[[], None] | None = None,
+        ) -> None:
             lit = map_js_payload_literal(payload)
             js = (
                 "(function(){ gpxLinkApplyPayload("
@@ -306,7 +481,13 @@ def main(argv: list[str] | None = None) -> int:
                 + "); var c = map.getCenter(); "
                 "return [c.lat, c.lng, map.getZoom()]; })()"
             )
-            self._web.page().runJavaScript(js, self._store_map_view)
+
+            def _done(result: object) -> None:
+                self._store_map_view(result)
+                if when_done is not None:
+                    when_done()
+
+            self._web.page().runJavaScript(js, _done)
 
         def _on_map_shell_load_finished(self, ok: bool) -> None:
             try:
@@ -319,9 +500,21 @@ def main(argv: list[str] | None = None) -> int:
                 if self._pending_map_payload is not None:
                     p = self._pending_map_payload
                     self._pending_map_payload = None
-                    self._apply_map_js_payload(p)
+                    self._apply_map_js_payload(
+                        p,
+                        when_done=self._hide_status_progress,
+                    )
+                else:
+                    self._hide_status_progress()
             else:
                 self._map_shell_ready = False
+                self._pending_map_payload = None
+                self._hide_status_progress()
+                QMessageBox.warning(
+                    self,
+                    "GPX Link",
+                    "Could not load the map view (network or WebEngine error).",
+                )
 
         def _add_paths_to_list(self, paths: list[Path]) -> None:
             self._file_list.blockSignals(True)
@@ -649,26 +842,20 @@ def main(argv: list[str] | None = None) -> int:
             if url.isValid() and url.scheme() in ("http", "https"):
                 QDesktopServices.openUrl(url)
 
-        def _fit_map_to_visible_route(self) -> None:
+        def _fit_after_parse(
+            self,
+            fit_generation: int,
+            wpts: list[Waypoint],
+            geopaths: list[GeoPath],
+        ) -> None:
+            if fit_generation != self._fit_gen:
+                return
             if not self._map_shell_ready:
-                return
-            paths = self._checked_paths()
-            if not paths:
-                QMessageBox.information(
-                    self,
-                    "GPX Link",
-                    "Select at least one GPX file to fit the map.",
-                )
-                return
-            try:
-                wpts, geopaths = load_map_features_from_paths_cached(
-                    paths, self._parse_cache
-                )
-            except OSError as e:
-                QMessageBox.warning(self, "GPX", str(e))
+                self._hide_status_progress()
                 return
             b = bounds_for_map(wpts, geopaths)
             if b is None:
+                self._hide_status_progress()
                 QMessageBox.information(
                     self,
                     "GPX Link",
@@ -685,9 +872,39 @@ def main(argv: list[str] | None = None) -> int:
                 "(function(){ map.fitBounds(" + lit + "); var c = map.getCenter(); "
                 "return [c.lat, c.lng, map.getZoom()]; })()"
             )
-            self._web.page().runJavaScript(js, self._store_map_view)
+
+            def _done(result: object) -> None:
+                self._store_map_view(result)
+                if fit_generation == self._fit_gen:
+                    self._hide_status_progress()
+
+            self._web.page().runJavaScript(js, _done)
+
+        def _fit_map_to_visible_route(self) -> None:
+            if not self._map_shell_ready:
+                return
+            paths = self._checked_paths()
+            if not paths:
+                QMessageBox.information(
+                    self,
+                    "GPX Link",
+                    "Select at least one GPX file to fit the map.",
+                )
+                return
+            self._fit_gen += 1
+            fit_generation = self._fit_gen
+            self._show_status_progress_determinate(len(paths), "Reading GPX — %p%")
+            self._run_parse_worker(
+                paths,
+                is_cancelled=lambda: self._fit_gen != fit_generation,
+                on_finished=lambda wpts, geopaths: self._fit_after_parse(
+                    fit_generation, wpts, geopaths
+                ),
+            )
 
         def _reload(self) -> None:
+            self._reload_gen += 1
+            reload_generation = self._reload_gen
             self._prune_parse_cache()
             paths = self._checked_paths()
             if not paths:
@@ -697,40 +914,16 @@ def main(argv: list[str] | None = None) -> int:
                     fit_padded_bounds=None,
                     map_center_and_zoom=self._last_map_view,
                 )
-            else:
-                try:
-                    wpts, geopaths = load_map_features_from_paths_cached(
-                        paths, self._parse_cache
-                    )
-                except OSError as e:
-                    QMessageBox.warning(self, "GPX", str(e))
-                    return
-                if not wpts and not geopaths:
-                    msg = (
-                        "No waypoints, track points, or route points found "
-                        "in the selected file(s)."
-                    )
-                    QMessageBox.information(self, "GPX", msg)
-                payload = build_map_js_payload(
-                    wpts,
-                    geopaths,
-                    fit_padded_bounds=None,
-                    map_center_and_zoom=self._last_map_view,
-                )
-                self._save_last_directory(paths[0])
-
-            if not self._map_shell_ready:
-                self._pending_map_payload = payload
-                if not self._awaiting_shell_load:
-                    self._awaiting_shell_load = True
-                    self._web.loadFinished.connect(self._on_map_shell_load_finished)
-                    self._web.setHtml(
-                        build_leaflet_map_shell_html(),
-                        QUrl("https://cdn.jsdelivr.net/"),
-                    )
+                self._deliver_reload_payload(reload_generation, payload)
                 return
-
-            self._apply_map_js_payload(payload)
+            self._show_status_progress_determinate(len(paths), "Reading GPX — %p%")
+            self._run_parse_worker(
+                paths,
+                is_cancelled=lambda: self._reload_gen != reload_generation,
+                on_finished=lambda wpts, geopaths: self._reload_after_parse_completed(
+                    reload_generation, paths, wpts, geopaths
+                ),
+            )
 
     # Do not pass GPX paths as Qt arguments; only the real process argv.
     app = QApplication(sys.argv)
