@@ -26,6 +26,11 @@ def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
     assert "preferCanvas" in html
     assert "fadeAnimation" in html
     assert "vectorRenderer" in html
+    assert "L.divIcon" in html
+    assert "gpx-poi-inner" in html
+    assert "GPX_DOM_POI_LIMIT" in html
+    assert "GPX_POI_VIEW_PAD" in html
+    assert "refreshGpxPoiMarkers" in html
     assert "L.circleMarker" in html
     assert "poiVisual" in html
     assert "gpxLinkSetUserLocation" in html

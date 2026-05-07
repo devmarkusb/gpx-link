@@ -40,6 +40,7 @@ def test_cli_html_output_file(tmp_path: Path) -> None:
     code = main(["html", str(gpx), "-o", str(out)])
     assert code == 0
     text = out.read_text(encoding="utf-8")
+    assert "L.divIcon" in text
     assert "L.circleMarker" in text
 
 

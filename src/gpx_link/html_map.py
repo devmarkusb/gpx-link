@@ -12,8 +12,12 @@ from gpx_link.simplify import simplify_polyline_points
 _LEAFLET_CSS = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
 _LEAFLET_JS = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
 
-# Mobile WebView / Qt WebEngine: huge polylines inflate HTML/JS parse;
-# many DOM markers (divIcon) tank pan/zoom FPS — prefer canvas circleMarkers.
+# Mobile WebView / Qt WebEngine: huge polylines inflate HTML/JS parse.
+# DOM emoji markers are limited to when ≤ this many POIs lie in the map view
+# (see JS); otherwise canvas dots for POIs currently in view.
+_DOM_POI_MARKER_LIMIT = 1000
+# Leaflet bounds.pad() — widen “in view” so edge markers do not flicker.
+_POI_VIEW_PAD = 0.12
 _MAX_VERTICES_PER_LINE = 5000
 _EPSILON_M_TRACK = 18.0
 
@@ -121,6 +125,24 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
   <style>
     html, body, #map {{ height: 100%; margin: 0; }}
     body {{ font-family: system-ui, sans-serif; }}
+    .gpx-poi-marker {{
+      background: none !important;
+      border: none !important;
+    }}
+    .gpx-poi-inner {{
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid #334155;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      line-height: 1;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+      box-sizing: border-box;
+    }}
   </style>
 </head>
 <body>
@@ -216,12 +238,20 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
         borderColor: 'hsl(' + hue + ', 52%, 42%)',
       }};
     }}
-    function poiTooltipHtml(m, visual) {{
-      let out =
-        '<span style="font-size:1.15em;line-height:1">' +
-        escHtml(visual.emoji) +
-        '</span><br />' +
-        escHtml(m.name);
+    function poiMarkerHtml(visual) {{
+      const st = 'border-color:' + visual.borderColor;
+      return '<div class="gpx-poi-inner" style="' + st + '">' + visual.emoji + '</div>';
+    }}
+    /** ``skipLeadingEmoji``: icon already shows emoji on the map (DOM markers). */
+    function poiTooltipHtml(m, visual, skipLeadingEmoji) {{
+      let out = skipLeadingEmoji
+        ? escHtml(m.name)
+        : (
+            '<span style="font-size:1.15em;line-height:1">' +
+            escHtml(visual.emoji) +
+            '</span><br />' +
+            escHtml(m.name)
+          );
       const typ = (m.waypointType || '').trim();
       const sym = (m.symbol || '').trim();
       if (typ) {{
@@ -251,31 +281,93 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
     }}).addTo(map);
     map.setView([20, 0], 2);
 
+    const GPX_DOM_POI_LIMIT = {_DOM_POI_MARKER_LIMIT};
+    const GPX_POI_VIEW_PAD = {_POI_VIEW_PAD};
+    function gpxDebounce(fn, waitMs) {{
+      let tid = null;
+      return function () {{
+        clearTimeout(tid);
+        const self = this;
+        const args = arguments;
+        tid = setTimeout(function () {{
+          fn.apply(self, args);
+        }}, waitMs);
+      }};
+    }}
+
     window.gpxLinkApplyPayload = function (payload) {{
+      if (window._gpxPoiMoveListener) {{
+        map.off('moveend', window._gpxPoiMoveListener);
+        map.off('zoomend', window._gpxPoiMoveListener);
+        window._gpxPoiMoveListener = null;
+      }}
       if (window._gpxContentGroup) {{
         map.removeLayer(window._gpxContentGroup);
       }}
       window._gpxContentGroup = L.featureGroup();
-      const markers = payload.markers || [];
+      window._gpxMarkersData = payload.markers || [];
+      window._gpxPoiLayerGroup = null;
       const paths = payload.paths || [];
-      for (const m of markers) {{
-        const vis = poiVisual(m.symbol, m.waypointType, m.name);
-        const marker = L.circleMarker([m.lat, m.lon], {{
-          renderer: vectorRenderer,
-          radius: 8,
-          color: vis.borderColor,
-          weight: 2,
-          fillColor: '#ffffff',
-          fillOpacity: 0.92,
-        }}).addTo(window._gpxContentGroup);
-        marker.bindTooltip(poiTooltipHtml(m, vis), {{
-          sticky: false,
-          direction: 'top',
-        }});
-        marker.on('click', function () {{
-          window.open(m.gmaps, '_blank', 'noopener,noreferrer');
-        }});
+
+      function refreshGpxPoiMarkers() {{
+        const markers = window._gpxMarkersData;
+        if (!markers.length || !window._gpxContentGroup) {{
+          return;
+        }}
+        const bounds = map.getBounds().pad(GPX_POI_VIEW_PAD);
+        let inViewCount = 0;
+        for (let i = 0; i < markers.length; i++) {{
+          const mm = markers[i];
+          if (bounds.contains(L.latLng(mm.lat, mm.lon))) {{
+            inViewCount += 1;
+          }}
+        }}
+        const useDom = inViewCount <= GPX_DOM_POI_LIMIT;
+        if (window._gpxPoiLayerGroup) {{
+          window._gpxContentGroup.removeLayer(window._gpxPoiLayerGroup);
+        }}
+        window._gpxPoiLayerGroup = L.layerGroup();
+        for (let i = 0; i < markers.length; i++) {{
+          const m = markers[i];
+          if (!bounds.contains(L.latLng(m.lat, m.lon))) {{
+            continue;
+          }}
+          const vis = poiVisual(m.symbol, m.waypointType, m.name);
+          let layer;
+          if (useDom) {{
+            const icon = L.divIcon({{
+              className: 'gpx-poi-marker',
+              html: poiMarkerHtml(vis),
+              iconSize: [32, 32],
+              iconAnchor: [16, 16],
+            }});
+            layer = L.marker([m.lat, m.lon], {{ icon: icon }});
+          }} else {{
+            layer = L.circleMarker([m.lat, m.lon], {{
+              renderer: vectorRenderer,
+              radius: 8,
+              color: vis.borderColor,
+              weight: 2,
+              fillColor: '#ffffff',
+              fillOpacity: 0.92,
+            }});
+          }}
+          layer.bindTooltip(poiTooltipHtml(m, vis, useDom), {{
+            sticky: false,
+            direction: 'top',
+          }});
+          layer.on('click', function () {{
+            window.open(m.gmaps, '_blank', 'noopener,noreferrer');
+          }});
+          layer.addTo(window._gpxPoiLayerGroup);
+        }}
+        window._gpxPoiLayerGroup.addTo(window._gpxContentGroup);
       }}
+
+      const debouncedPoiRefresh = gpxDebounce(refreshGpxPoiMarkers, 48);
+      window._gpxPoiMoveListener = debouncedPoiRefresh;
+      map.on('moveend zoomend', window._gpxPoiMoveListener);
+
       for (const p of paths) {{
         const style = pathStyle[p.kind] || pathStyle.track;
         const coords = p.coords;
@@ -309,6 +401,7 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       }} else if (initialView) {{
         map.setView([initialView[0], initialView[1]], initialView[2]);
       }}
+      refreshGpxPoiMarkers();
     }};
 
     let userLocMarker = null;
