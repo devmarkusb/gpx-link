@@ -69,4 +69,28 @@ platform :android do
       **(rs && !rs.empty? ? { release_status: rs } : {}),
     )
   end
+
+  # Listing text, graphics, screenshots, changelogs — no AAB/APK. Same Play track as binary uploads.
+  # Use when the store listing changed but versionCode did not (avoids duplicate-version rejection).
+  lane :upload_play_metadata_only do |options|
+    track = (options[:track] || ENV["PLAY_TRACK"] || "internal").to_s
+    json = ENV["PLAY_SERVICE_ACCOUNT_JSON"]
+    json_path = File.join(ANDROID_DIR, "play-console-service-account.json")
+    if json && !json.empty?
+      File.write(json_path, json)
+    elsif File.exist?(json_path)
+    else
+      UI.user_error!("Set PLAY_SERVICE_ACCOUNT_JSON or place play-console-service-account.json in android/")
+    end
+
+    rs = ENV["PLAY_RELEASE_STATUS"]&.strip
+    upload_to_play_store(
+      track: track,
+      json_key: json_path,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      metadata_path: File.join(ANDROID_DIR, "fastlane", "metadata", "android"),
+      **(rs && !rs.empty? ? { release_status: rs } : {}),
+    )
+  end
 end
