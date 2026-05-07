@@ -52,6 +52,8 @@ def build_map_js_payload(
                 "name": w.name,
                 "source": str(w.source_path),
                 "gmaps": google_maps_url(w.latitude, w.longitude, name=w.name),
+                "symbol": w.symbol,
+                "waypointType": w.waypoint_type,
             }
         )
     line_features: list[dict[str, object]] = []
@@ -118,6 +120,24 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
   <style>
     html, body, #map {{ height: 100%; margin: 0; }}
     body {{ font-family: system-ui, sans-serif; }}
+    .gpx-poi-marker {{
+      background: none !important;
+      border: none !important;
+    }}
+    .gpx-poi-inner {{
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid #334155;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      line-height: 1;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+      box-sizing: border-box;
+    }}
   </style>
 </head>
 <body>
@@ -135,13 +155,106 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       track: {{ color: '#2563eb', weight: 4, opacity: 0.85 }},
       route: {{ color: '#16a34a', weight: 4, opacity: 0.85 }},
     }};
-    const waypointStyle = {{
-      radius: 5,
-      color: '#1d4ed8',
-      weight: 1,
-      fillColor: '#3b82f6',
-      fillOpacity: 0.9,
-    }};
+    function hueFromStr(str) {{
+      let h = 0;
+      for (let i = 0; i < str.length; i++) {{
+        h = ((h << 5) - h) + str.charCodeAt(i);
+        h |= 0;
+      }}
+      return Math.abs(h) % 360;
+    }}
+    /** Map GPX sym / type strings to marker emoji and ring color (best-effort). */
+    function poiVisual(symbol, waypointType, name) {{
+      const combined = [symbol || '', waypointType || '', name || ''].join(' ').trim();
+      const s = combined.toLowerCase();
+      const rules = [
+        [/\\bpharmacy\\b|drug\\s*store|\\bcvs\\b|\\bwalgreens\\b/i, '💊', '#7c3aed'],
+        [/hospital|clinic|emergency|\\burgent\\b|\\bems\\b/i, '🏥', '#dc2626'],
+        [/camp|tent|\\brv\\s*park/i, '⛺', '#ca8a04'],
+        [
+          /lodging|hotel|motel|hostel|resort|bed|\\bb&b\\b|b\\s*&\\s*b/i,
+          '🛏️',
+          '#4f46e5',
+        ],
+        [/gas|fuel|diesel|petrol|\\bgas\\s*station/i, '⛽', '#15803d'],
+        [/parking|\\bpark\\s*lot/i, '🅿️', '#52525b'],
+        [/restaurant|dining|food|cafe|coffee|bar|pub|bakery/i, '🍽️', '#c2410c'],
+        [/grocery|supermarket|\\bmarket\\b|\\bmarketplace\\b/i, '🛒', '#059669'],
+        [/\\bzoo\\b|\\bzoological|wildlife\\s*park/i, '🦁', '#b45309'],
+        [
+          /aquarium|oceanarium|sea\\s*life|auqarium|auqrium/i,
+          '🐠',
+          '#0e7490',
+        ],
+        [/playground|\\bplay\\s*area/i, '🛝', '#ea580c'],
+        [
+          /swimming|outdoor\\s*pool|lap\\s*pool|natatorium|\\bpool\\b|aquatic\\s*center|wading\\s*pool|water\\s*park/i,
+          '🏊',
+          '#0284c7',
+        ],
+        [/water|drinking|\\bfountain\\b|\\bhydration/i, '💧', '#0ea5e9'],
+        [/view|scenic|overlook|vista|panorama/i, '👁️', '#7c3aed'],
+        [/summit|peak|mountain|\\bpeak\\b|\\bmt\\.\\b/i, '⛰️', '#57534e'],
+        [/trailhead|trail\\s*head|\\bhiking\\b|hike/i, '🥾', '#854d0e'],
+        [/bridge/i, '🌉', '#0369a1'],
+        [/waterfall|falls\\b/i, '💧', '#0284c7'],
+        [/beach|ocean|coast|shore/i, '🏖️', '#0d9488'],
+        [/airport|airfield|\\bhelipad\\b/i, '✈️', '#1d4ed8'],
+        [/marina|harbor|harbour|boat|ferry/i, '⛵', '#2563eb'],
+        [/fish/i, '🎣', '#0f766e'],
+        [/ski|skiing|lift/i, '⛷️', '#7dd3fc'],
+        [/danger|hazard|caution|warning/i, '⚠️', '#d97706'],
+        [/(\\binfo\\b|information|visitor\\s*center)/i, 'ℹ️', '#2563eb'],
+        [/(city|town|village|settlement|urban)/i, '🏙️', '#64748b'],
+        [/church|chapel|cathedral|temple|mosque|shrine/i, '⛪', '#78716c'],
+        [/cemetery|graveyard/i, '🪦', '#57534e'],
+        [/picnic/i, '🧺', '#65a30d'],
+        [/tunnel/i, '🚇', '#475569'],
+        [/pass|col\\b|notch|saddle/i, '🚩', '#b45309'],
+        [/ruin|historic|archaeology|monument|memorial|\\bcastle\\b/i, '🏛️', '#92400e'],
+        [/geocache|\\bgc\\b/i, '🎯', '#a16207'],
+        [/blue\\b|flag.*blue|diamond.*blue/i, '📍', '#2563eb'],
+        [/green\\b|diamond.*green/i, '📍', '#16a34a'],
+        [/red\\b|flag.*red/i, '📍', '#dc2626'],
+        [/yellow|amber/i, '📍', '#ca8a04'],
+        [/pin|pushpin|\\bflag\\b|waypoint|\\bwpt\\b/i, '📍', '#2563eb'],
+      ];
+      for (const row of rules) {{
+        const re = row[0];
+        const emoji = row[1];
+        const color = row[2];
+        if (re.test(s)) {{
+          return {{ emoji: emoji, borderColor: color }};
+        }}
+      }}
+      const hue = hueFromStr(combined || 'waypoint');
+      return {{
+        emoji: '📍',
+        borderColor: 'hsl(' + hue + ', 52%, 42%)',
+      }};
+    }}
+    function poiMarkerHtml(visual) {{
+      const st = 'border-color:' + visual.borderColor;
+      return '<div class="gpx-poi-inner" style="' + st + '">' + visual.emoji + '</div>';
+    }}
+    function poiTooltipHtml(m) {{
+      let out = escHtml(m.name);
+      const typ = (m.waypointType || '').trim();
+      const sym = (m.symbol || '').trim();
+      if (typ) {{
+        out +=
+          '<br /><span style="opacity:.85;font-size:.88em;">' +
+          escHtml(typ) +
+          '</span>';
+      }}
+      if (sym && sym.toLowerCase() !== typ.toLowerCase()) {{
+        out +=
+          '<br /><span style="opacity:.7;font-size:.82em;">' +
+          escHtml(sym) +
+          '</span>';
+      }}
+      return out;
+    }}
     const map = L.map('map', {{ preferCanvas: true }});
     L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
       maxZoom: 19,
@@ -157,10 +270,17 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       const markers = payload.markers || [];
       const paths = payload.paths || [];
       for (const m of markers) {{
-        const marker = L.circleMarker([m.lat, m.lon], waypointStyle).addTo(
+        const vis = poiVisual(m.symbol, m.waypointType, m.name);
+        const icon = L.divIcon({{
+          className: 'gpx-poi-marker',
+          html: poiMarkerHtml(vis),
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        }});
+        const marker = L.marker([m.lat, m.lon], {{ icon: icon }}).addTo(
           window._gpxContentGroup,
         );
-        marker.bindTooltip(escHtml(m.name), {{ sticky: true }});
+        marker.bindTooltip(poiTooltipHtml(m), {{ sticky: true }});
         marker.on('click', function () {{
           window.open(m.gmaps, '_blank', 'noopener,noreferrer');
         }});
