@@ -29,11 +29,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.core.view.isVisible
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -46,10 +48,19 @@ class MainActivity : AppCompatActivity() {
     private val gpxItems = mutableListOf<GpxListItem>()
     private lateinit var toolbar: MaterialToolbar
     private lateinit var webView: WebView
+    private lateinit var globalBusyProgress: LinearProgressIndicator
     private lateinit var fileList: RecyclerView
     private lateinit var gpxListActions: View
     private lateinit var adapter: GpxFileAdapter
     private val importExecutor = Executors.newSingleThreadExecutor()
+    private val mapRenderExecutor = Executors.newSingleThreadExecutor()
+    private var importBusy = false
+    private var mapBusy = false
+    private var locationBusy = false
+    /** Monotonic id for GPX Python render passes; bumped on each [reloadMap] start. */
+    private var renderRequestGeneration = 0
+    /** Monotonic id tied to successful [WebView.loadDataWithBaseURL] map loads for stale-finish guards. */
+    private var committedMapWebGeneration = 0
 
     private val locationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -67,6 +78,8 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isEmpty()) return@registerForActivityResult
             val uriSnapshot = uris.toList()
+            importBusy = true
+            refreshGlobalBusyProgress()
             importExecutor.execute {
                 val imported = mutableListOf<GpxListItem>()
                 val errors = mutableListOf<String>()
@@ -89,6 +102,8 @@ class MainActivity : AppCompatActivity() {
                     }
                     adapter.notifyDataSetChanged()
                     persistGpxSelection()
+                    importBusy = false
+                    refreshGlobalBusyProgress()
                     reloadMap()
                 }
             }
@@ -165,6 +180,9 @@ class MainActivity : AppCompatActivity() {
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(application))
         }
+
+        globalBusyProgress = findViewById(R.id.global_busy_progress)
+        globalBusyProgress.isIndeterminate = true
 
         toolbar = findViewById(R.id.toolbar)
         toolbar.inflateMenu(R.menu.main)
@@ -406,7 +424,63 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         importExecutor.shutdownNow()
+        mapRenderExecutor.shutdownNow()
         super.onDestroy()
+    }
+
+    private fun refreshGlobalBusyProgress() {
+        val busy = importBusy || mapBusy || locationBusy
+        globalBusyProgress.isVisible = busy
+    }
+
+    private fun applyMapPayload(rq: Int, jsonPayload: JSONObject) {
+        if (rq != renderRequestGeneration) {
+            mapBusy = false
+            refreshGlobalBusyProgress()
+            return
+        }
+
+        val html =
+            if (jsonPayload.optBoolean("ok", false)) {
+                jsonPayload.optString("html", "")
+            } else {
+                ""
+            }
+
+        if (html.isBlank() || !jsonPayload.optBoolean("ok", false)) {
+            Toast.makeText(
+                this,
+                jsonPayload.optString("error", getString(R.string.gpx_parse_error)),
+                Toast.LENGTH_LONG,
+            ).show()
+            mapBusy = false
+            refreshGlobalBusyProgress()
+            return
+        }
+
+        if (jsonPayload.optBoolean("warn_empty", false)) {
+            Toast.makeText(this, R.string.gpx_empty_features, Toast.LENGTH_LONG).show()
+        }
+
+        committedMapWebGeneration += 1
+        val ticket = committedMapWebGeneration
+        webView.tag = ticket
+        webView.loadDataWithBaseURL(
+            "https://cdn.jsdelivr.net/",
+            html,
+            "text/html",
+            "UTF-8",
+            null,
+        )
+    }
+
+    private fun onMapWebPageFinished(webViewFinished: WebView) {
+        if (webViewFinished !== webView) return
+        val ticket = webView.tag as? Int ?: return
+        if (ticket != committedMapWebGeneration) return
+        if (!mapBusy) return
+        mapBusy = false
+        refreshGlobalBusyProgress()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -441,7 +515,14 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
         }
-        wv.webViewClient = WebViewClient()
+        wv.webViewClient =
+            object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    if (view !== wv) return
+                    onMapWebPageFinished(wv)
+                }
+            }
     }
 
     private fun persistGpxSelection() {
@@ -484,50 +565,53 @@ class MainActivity : AppCompatActivity() {
     private fun checkedPaths(): List<String> = gpxItems.filter { it.checked }.map { it.cachePath }
 
     private fun reloadMap() {
-        renderAndLoad(checkedPaths())
-    }
-
-    private fun renderAndLoad(paths: List<String>) {
-        val pathsJson = JSONArray(paths).toString()
-        val jsonResult: String =
-            try {
-                val py = Python.getInstance()
-                val module = py.getModule("bridge")
-                module.callAttr("render", pathsJson).toString()
-            } catch (e: Throwable) {
-                Toast.makeText(
-                    this,
-                    e.message ?: getString(R.string.gpx_parse_error),
-                    Toast.LENGTH_LONG,
-                ).show()
-                return
+        renderRequestGeneration += 1
+        val rq = renderRequestGeneration
+        mapBusy = true
+        refreshGlobalBusyProgress()
+        val pathsJson = JSONArray(checkedPaths()).toString()
+        mapRenderExecutor.execute {
+            val jsonRaw: String? =
+                try {
+                    val py = Python.getInstance()
+                    val module = py.getModule("bridge")
+                    module.callAttr("render", pathsJson).toString()
+                } catch (_: Throwable) {
+                    null
+                }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (rq != renderRequestGeneration) {
+                    mapBusy = false
+                    refreshGlobalBusyProgress()
+                    return@runOnUiThread
+                }
+                if (jsonRaw == null) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.gpx_parse_error),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    mapBusy = false
+                    refreshGlobalBusyProgress()
+                    return@runOnUiThread
+                }
+                val obj =
+                    try {
+                        JSONObject(jsonRaw)
+                    } catch (_: Exception) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            R.string.gpx_parse_error,
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        mapBusy = false
+                        refreshGlobalBusyProgress()
+                        return@runOnUiThread
+                    }
+                applyMapPayload(rq, obj)
             }
-        val obj =
-            try {
-                JSONObject(jsonResult)
-            } catch (_: Exception) {
-                Toast.makeText(this, R.string.gpx_parse_error, Toast.LENGTH_LONG).show()
-                return
-            }
-        if (!obj.optBoolean("ok", false)) {
-            Toast.makeText(
-                this,
-                obj.optString("error", getString(R.string.gpx_parse_error)),
-                Toast.LENGTH_LONG,
-            ).show()
-            return
         }
-        if (obj.optBoolean("warn_empty", false)) {
-            Toast.makeText(this, R.string.gpx_empty_features, Toast.LENGTH_LONG).show()
-        }
-        val html = obj.getString("html")
-        webView.loadDataWithBaseURL(
-            "https://cdn.jsdelivr.net/",
-            html,
-            "text/html",
-            "UTF-8",
-            null,
-        )
     }
 
     private fun copyUriToCache(uri: Uri, index: Int): String {
@@ -597,7 +681,8 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun requestSingleFreshLocation(lm: LocationManager, provider: String) {
-        Toast.makeText(this, R.string.location_searching, Toast.LENGTH_SHORT).show()
+        locationBusy = true
+        refreshGlobalBusyProgress()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 lm.getCurrentLocation(
@@ -605,6 +690,8 @@ class MainActivity : AppCompatActivity() {
                     CancellationSignal(),
                     ContextCompat.getMainExecutor(this),
                 ) { loc ->
+                    locationBusy = false
+                    refreshGlobalBusyProgress()
                     if (loc != null) {
                         injectUserLocationOnMap(loc.latitude, loc.longitude)
                     } else {
@@ -617,6 +704,8 @@ class MainActivity : AppCompatActivity() {
                     provider,
                     object : LocationListener {
                         override fun onLocationChanged(location: Location) {
+                            locationBusy = false
+                            refreshGlobalBusyProgress()
                             injectUserLocationOnMap(location.latitude, location.longitude)
                         }
 
@@ -626,6 +715,8 @@ class MainActivity : AppCompatActivity() {
                         override fun onProviderEnabled(provider: String) {}
 
                         override fun onProviderDisabled(provider: String) {
+                            locationBusy = false
+                            refreshGlobalBusyProgress()
                             Toast.makeText(
                                 this@MainActivity,
                                 R.string.location_provider_disabled,
@@ -637,6 +728,8 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         } catch (_: SecurityException) {
+            locationBusy = false
+            refreshGlobalBusyProgress()
             Toast.makeText(this, R.string.location_error, Toast.LENGTH_LONG).show()
         }
     }

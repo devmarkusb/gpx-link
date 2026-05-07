@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from pathlib import Path
 from typing import Any
 
@@ -25,11 +25,14 @@ def load_map_features_from_paths(
 def load_map_features_from_paths_cached(
     paths: list[Path],
     cache: MutableMapping[str, tuple[int, list[Waypoint], list[GeoPath]]],
+    *,
+    progress: Callable[[int, int], None] | None = None,
 ) -> tuple[list[Waypoint], list[GeoPath]]:
     """Parse like ``load_map_features_from_paths`` with per-file mtime cache hits."""
+    total = len(paths)
     waypoints: list[Waypoint] = []
     geo_paths: list[GeoPath] = []
-    for path in paths:
+    for idx, path in enumerate(paths):
         key = str(path.resolve())
         mtime_ns = path.stat().st_mtime_ns
         hit = cache.get(key)
@@ -40,6 +43,8 @@ def load_map_features_from_paths_cached(
             cache[key] = (mtime_ns, w, g)
         waypoints.extend(w)
         geo_paths.extend(g)
+        if progress is not None and total > 0:
+            progress(idx + 1, total)
     return waypoints, geo_paths
 
 
