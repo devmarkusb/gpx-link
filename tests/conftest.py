@@ -8,6 +8,8 @@ SAMPLE_GPX = """<?xml version="1.0" encoding="UTF-8"?>
     <name>Alpha</name>
     <ele>100.0</ele>
     <desc>First</desc>
+    <type>Trailhead</type>
+    <sym>Trail Head</sym>
   </wpt>
   <wpt lat="46.0" lon="-123.0">
     <name>Beta</name>

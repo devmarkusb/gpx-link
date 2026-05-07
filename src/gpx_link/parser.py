@@ -80,6 +80,8 @@ def _load_one(path: Path) -> tuple[list[Waypoint], list[GeoPath]]:
     result: list[Waypoint] = []
     for w in gpx.waypoints:
         name = (w.name or "").strip() or "Waypoint"
+        sym = (w.symbol or "").strip() or None
+        wpt_type = (w.type or "").strip() or None
         result.append(
             Waypoint(
                 source_path=resolved,
@@ -88,6 +90,8 @@ def _load_one(path: Path) -> tuple[list[Waypoint], list[GeoPath]]:
                 longitude=float(w.longitude),
                 elevation_m=float(w.elevation) if w.elevation is not None else None,
                 description=(w.description or "").strip() or None,
+                symbol=sym,
+                waypoint_type=wpt_type,
             )
         )
     paths: list[GeoPath] = []

@@ -51,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
                 "longitude": w.longitude,
                 "elevation_m": w.elevation_m,
                 "description": w.description,
+                "symbol": w.symbol,
+                "waypoint_type": w.waypoint_type,
             }
             sys.stdout.write(json.dumps(line, ensure_ascii=False) + "\n")
         return 0
