@@ -763,7 +763,8 @@ def main(argv: list[str] | None = None) -> int:
             ]
             lit = json.dumps(corners, separators=(",", ":")).replace("<", "\\u003c")
             js = (
-                "(function(){ map.fitBounds(" + lit + "); var c = map.getCenter(); "
+                "(function(){ map.fitBounds(" + lit + ", { animate: false }); "
+                "var c = map.getCenter(); "
                 "return [c.lat, c.lng, map.getZoom()]; })()"
             )
 

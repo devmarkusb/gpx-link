@@ -309,7 +309,7 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       const fitBounds = payload.fitBounds;
       const initialView = payload.initialView;
       if (fitBounds) {{
-        map.fitBounds(fitBounds);
+        map.fitBounds(fitBounds, {{ animate: false }});
       }} else if (initialView) {{
         map.setView([initialView[0], initialView[1]], initialView[2]);
       }}

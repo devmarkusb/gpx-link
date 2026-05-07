@@ -585,7 +585,7 @@ class MainActivity : AppCompatActivity() {
         val lit = corners.toString()
         val ticket = webView.tag as? Int ?: return
         webView.evaluateJavascript(
-            "(function(){try{map.fitBounds($lit);var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
+            "(function(){try{map.fitBounds($lit,{animate:false});var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
         ) { raw ->
             if ((webView.tag as? Int) != ticket) return@evaluateJavascript
             parseJsMapView(raw)?.let { lastMapView = it }
