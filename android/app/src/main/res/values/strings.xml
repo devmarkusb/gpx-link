@@ -5,6 +5,8 @@
     <string name="gpx_file_list">GPX file list</string>
     <string name="select_all_gpx">Select all</string>
     <string name="unselect_all_gpx">Unselect all</string>
+    <string name="fit_to_route">Fit to route</string>
+    <string name="fit_map_need_selection">Select at least one GPX file to fit the map.</string>
     <string name="delete_gpx">Delete</string>
     <string name="gpx_parse_error">Could not read GPX</string>
     <string name="gpx_empty_features">No waypoints, track points, or route points found in the selected file(s).</string>
