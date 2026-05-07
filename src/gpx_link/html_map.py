@@ -24,6 +24,47 @@ _EPSILON_M_TRACK = 18.0
 # Default: derive fit bounds from all waypoints and paths (CLI / Android / tests).
 _USE_BOUNDS_FROM_FEATURES = object()
 
+# First paint before ``gpxLinkApplyPayload`` runs (full WebView reloads): avoid a global
+# world view frame that then jumps to fit or preserved pan/zoom (feels like a refit).
+_BOOTSTRAP_WORLD: tuple[float, float, int] = (20.0, 0.0, 2)
+
+
+def _bootstrap_map_view_from_script_payload_literal(
+    auto_apply_payload_literal: str | None,
+) -> tuple[float, float, int]:
+    """Pan/zoom for ``L.map`` when the document embeds an initial payload literal."""
+    if auto_apply_payload_literal is None:
+        return _BOOTSTRAP_WORLD
+    try:
+        payload = json.loads(auto_apply_payload_literal)
+    except json.JSONDecodeError:
+        return _BOOTSTRAP_WORLD
+    iv = payload.get("initialView")
+    if isinstance(iv, list) and len(iv) >= 3:
+        try:
+            return (
+                float(iv[0]),
+                float(iv[1]),
+                int(round(float(iv[2]))),
+            )
+        except (TypeError, ValueError):
+            pass
+    fb = payload.get("fitBounds")
+    if isinstance(fb, list) and len(fb) >= 2:
+        a, b = fb[0], fb[1]
+        if isinstance(a, list) and isinstance(b, list) and len(a) >= 2 and len(b) >= 2:
+            try:
+                min_lat, min_lon = float(a[0]), float(a[1])
+                max_lat, max_lon = float(b[0]), float(b[1])
+                return (
+                    (min_lat + max_lat) / 2.0,
+                    (min_lon + max_lon) / 2.0,
+                    10,
+                )
+            except (TypeError, ValueError):
+                pass
+    return _BOOTSTRAP_WORLD
+
 
 def _json_for_script(data: object) -> str:
     """Make JSON safe to embed in <script> (no raw ``</script>`` text)."""
@@ -116,6 +157,11 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
         if auto_apply_payload_literal is not None
         else ""
     )
+    boot_lat, boot_lon, boot_zoom = _bootstrap_map_view_from_script_payload_literal(
+        auto_apply_payload_literal
+    )
+    boot_lat_js = json.dumps(boot_lat)
+    boot_lon_js = json.dumps(boot_lon)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -272,6 +318,8 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       preferCanvas: true,
       fadeAnimation: false,
       zoomAnimation: true,
+      center: [{boot_lat_js}, {boot_lon_js}],
+      zoom: {boot_zoom},
     }});
     const vectorRenderer = L.canvas({{ padding: 0.5 }});
     L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
@@ -279,7 +327,6 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       fadeAnimation: false,
       attribution: '&copy; OpenStreetMap contributors'
     }}).addTo(map);
-    map.setView([20, 0], 2);
 
     const GPX_DOM_POI_LIMIT = {_DOM_POI_MARKER_LIMIT};
     const GPX_POI_VIEW_PAD = {_POI_VIEW_PAD};
