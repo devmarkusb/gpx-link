@@ -24,15 +24,14 @@ _EPSILON_M_TRACK = 18.0
 # Default: derive fit bounds from all waypoints and paths (CLI / Android / tests).
 _USE_BOUNDS_FROM_FEATURES = object()
 
-# First paint before ``gpxLinkApplyPayload`` runs (full WebView reloads): avoid a global
-# world view frame that then jumps to fit or preserved pan/zoom (feels like a refit).
+# First paint before ``gpxLinkApplyPayload`` runs during full WebView reloads.
 _BOOTSTRAP_WORLD: tuple[float, float, int] = (20.0, 0.0, 2)
 
 
 def _bootstrap_map_view_from_script_payload_literal(
     auto_apply_payload_literal: str | None,
 ) -> tuple[float, float, int]:
-    """Pan/zoom for ``L.map`` when the document embeds an initial payload literal."""
+    """Pan/zoom for ``L.map`` when the document embeds an explicit saved view."""
     if auto_apply_payload_literal is None:
         return _BOOTSTRAP_WORLD
     try:
@@ -49,20 +48,6 @@ def _bootstrap_map_view_from_script_payload_literal(
             )
         except (TypeError, ValueError):
             pass
-    fb = payload.get("fitBounds")
-    if isinstance(fb, list) and len(fb) >= 2:
-        a, b = fb[0], fb[1]
-        if isinstance(a, list) and isinstance(b, list) and len(a) >= 2 and len(b) >= 2:
-            try:
-                min_lat, min_lon = float(a[0]), float(a[1])
-                max_lat, max_lon = float(b[0]), float(b[1])
-                return (
-                    (min_lat + max_lat) / 2.0,
-                    (min_lon + max_lon) / 2.0,
-                    10,
-                )
-            except (TypeError, ValueError):
-                pass
     return _BOOTSTRAP_WORLD
 
 

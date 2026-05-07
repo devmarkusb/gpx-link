@@ -704,10 +704,29 @@ class MainActivity : AppCompatActivity() {
         val rq = renderRequestGeneration
         mapBusy = true
         refreshGlobalBusyProgress()
+        captureMapViewForReload(rq)
+    }
+
+    private fun captureMapViewForReload(rq: Int) {
+        webView.evaluateJavascript(
+            "(function(){try{if(typeof map==='undefined'||!map.getCenter)return null;" +
+                "var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
+        ) { raw ->
+            if (isFinishing || isDestroyed) return@evaluateJavascript
+            if (rq != renderRequestGeneration) return@evaluateJavascript
+            val currentMapView = parseJsMapView(raw)
+            if (currentMapView != null) {
+                lastMapView = currentMapView
+            }
+            renderMapForCurrentSelection(rq, currentMapView ?: lastMapView)
+        }
+    }
+
+    private fun renderMapForCurrentSelection(
+        rq: Int,
+        preservedPanZoom: Triple<Double, Double, Int>?,
+    ) {
         val pathsJson = JSONArray(checkedPaths()).toString()
-        // Snapshot before any async work: lastMapView is only updated async via JS unless we
-        // commit preservedPanZoom on page finish — without this, rapid toggles see null and refit.
-        val preservedPanZoom = lastMapView
         val mapViewJson =
             preservedPanZoom?.let { JSONArray(listOf(it.first, it.second, it.third)).toString() }
                 ?: "null"

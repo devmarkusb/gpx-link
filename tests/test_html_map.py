@@ -46,6 +46,24 @@ def test_build_leaflet_html_empty_world_view() -> None:
     assert "tile.openstreetmap.org" in html
 
 
+def test_build_leaflet_html_fit_bounds_keeps_world_bootstrap() -> None:
+    wpts = [Waypoint(Path("/a.gpx"), "A", 45.5, -122.5)]
+    html = build_leaflet_html(wpts)
+    assert "center: [20.0, 0.0]" in html
+    assert "zoom: 2" in html
+    assert "map.fitBounds" in html
+
+
+def test_build_leaflet_html_saved_view_bootstraps_map() -> None:
+    html = build_leaflet_html(
+        [],
+        fit_padded_bounds=None,
+        map_center_and_zoom=(48.85, 2.35, 11),
+    )
+    assert "center: [48.85, 2.35]" in html
+    assert "zoom: 11" in html
+
+
 def test_build_leaflet_map_shell_has_apply_but_no_initial_coords() -> None:
     html = build_leaflet_map_shell_html()
     assert "gpxLinkApplyPayload" in html
