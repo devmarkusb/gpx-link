@@ -71,19 +71,6 @@
                     android:minHeight="40dp"
                     android:text="@string/unselect_all_gpx"
                     android:textSize="12sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_fit_to_route"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:minHeight="40dp"
-                    android:text="@string/fit_to_route"
-                    android:textSize="12sp" />
             </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
@@ -106,6 +93,19 @@
                 android:id="@+id/map_webview"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_fit_to_route"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_margin="12dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minHeight="40dp"
+                android:text="@string/fit_to_route"
+                android:textSize="12sp" />
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fab_my_location"
