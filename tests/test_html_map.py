@@ -41,7 +41,8 @@ def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
 
 def test_build_leaflet_html_empty_world_view() -> None:
     html = build_leaflet_html([])
-    assert "map.setView" in html
+    assert "center: [20.0, 0.0]" in html
+    assert "zoom: 2" in html
     assert "tile.openstreetmap.org" in html
 
 
