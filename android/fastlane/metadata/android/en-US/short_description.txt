@@ -1,1 +1,1 @@
-Open GPX POIs in Google Maps! Select GPX files: OSM map with tracks & waypoints; tap markers for Google Maps.
+Open GPX track POIs in Google Maps.
