@@ -74,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
                 QAbstractItemView.SelectionMode.ExtendedSelection
             )
             self._file_list.itemChanged.connect(self._on_file_item_changed)
+            self._file_list.itemDoubleClicked.connect(self._on_gpx_item_double_clicked)
 
             file_panel = QWidget()
             file_layout = QVBoxLayout(file_panel)
@@ -429,6 +430,14 @@ def main(argv: list[str] | None = None) -> int:
         def _on_file_item_changed(self, _item: QListWidgetItem) -> None:
             self._persist_gpx_file_list()
             self._reload()
+
+        def _on_gpx_item_double_clicked(self, item: QListWidgetItem) -> None:
+            # Single click is for row selection (e.g. Shift+click, Delete). Double-click
+            # toggles show-on-map without aiming at the checkbox.
+            if item.checkState() == Qt.CheckState.Checked:
+                item.setCheckState(Qt.CheckState.Unchecked)
+            else:
+                item.setCheckState(Qt.CheckState.Checked)
 
         def _set_all_file_check_states(self, state: Qt.CheckState) -> None:
             self._file_list.blockSignals(True)
