@@ -10,6 +10,47 @@ permissions:
   contents: read
 
 jobs:
+  commit-messages:
+    name: Conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip && pip install uv
+
+      - name: Sync project (uv sync)
+        run: uv sync
+
+      - name: Validate commit messages (pull request)
+        if: github.event_name == 'pull_request'
+        run: |
+          uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
+            --from-ref "${{ github.event.pull_request.base.sha }}" \
+            --to-ref "${{ github.event.pull_request.head.sha }}"
+
+      - name: Validate commit messages (push)
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        run: |
+          uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
+            --from-ref "${{ github.event.before }}" \
+            --to-ref "${{ github.event.after }}"
+
+      - name: Validate commit messages (push, new ref)
+        if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
+        run: |
+          git log -1 --pretty=%B "${{ github.event.after }}" > /tmp/commit-msg.txt
+          uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
+            --commit-msg-filename /tmp/commit-msg.txt
+
   build:
     runs-on: ubuntu-latest
     strategy:
