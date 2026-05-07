@@ -62,6 +62,9 @@ class MainActivity : AppCompatActivity() {
     /** Monotonic id tied to successful [WebView.loadDataWithBaseURL] map loads for stale-finish guards. */
     private var committedMapWebGeneration = 0
 
+    /** Last pan/zoom from the Leaflet map; passed into [reloadMap] so GPX toggles do not refit. */
+    private var lastMapView: Triple<Double, Double, Int>? = null
+
     private val locationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
             val ok =
@@ -196,6 +199,17 @@ class MainActivity : AppCompatActivity() {
         setFilePanelVisible(panelVisible)
         toolbar.menu.findItem(R.id.action_toggle_file_list)?.isChecked = panelVisible
 
+        savedInstanceState?.let { b ->
+            if (b.containsKey(STATE_MAP_LAT) && b.containsKey(STATE_MAP_LON) && b.containsKey(STATE_MAP_ZOOM)) {
+                lastMapView =
+                    Triple(
+                        b.getDouble(STATE_MAP_LAT),
+                        b.getDouble(STATE_MAP_LON),
+                        b.getInt(STATE_MAP_ZOOM),
+                    )
+            }
+        }
+
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_open -> {
@@ -235,6 +249,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btn_select_all_gpx).setOnClickListener { selectAllGpx() }
         findViewById<View>(R.id.btn_unselect_all_gpx).setOnClickListener { unselectAllGpx() }
+        findViewById<View>(R.id.btn_fit_to_route).setOnClickListener { fitMapToVisibleSelection() }
 
         webView = findViewById(R.id.map_webview)
         setupWebView(webView)
@@ -257,6 +272,11 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(STATE_FILE_PANEL_VISIBLE, fileList.visibility == View.VISIBLE)
+        lastMapView?.let {
+            outState.putDouble(STATE_MAP_LAT, it.first)
+            outState.putDouble(STATE_MAP_LON, it.second)
+            outState.putInt(STATE_MAP_ZOOM, it.third)
+        }
     }
 
     private fun setFilePanelVisible(visible: Boolean) {
@@ -293,6 +313,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun promptNewProject() {
         if (gpxItems.isEmpty()) {
+            lastMapView = null
             reloadMap()
             return
         }
@@ -305,6 +326,7 @@ class MainActivity : AppCompatActivity() {
                 gpxItems.clear()
                 adapter.notifyDataSetChanged()
                 persistGpxSelection()
+                lastMapView = null
                 reloadMap()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -359,6 +381,7 @@ class MainActivity : AppCompatActivity() {
         setFilePanelVisible(showPanel)
         toolbar.menu.findItem(R.id.action_toggle_file_list)?.isChecked = showPanel
         persistGpxSelection()
+        lastMapView = null
         reloadMap()
         if (skipped > 0) {
             Toast.makeText(this, R.string.project_missing_paths, Toast.LENGTH_LONG).show()
@@ -476,11 +499,97 @@ class MainActivity : AppCompatActivity() {
 
     private fun onMapWebPageFinished(webViewFinished: WebView) {
         if (webViewFinished !== webView) return
-        val ticket = webView.tag as? Int ?: return
+        val ticket = webViewFinished.tag as? Int ?: return
         if (ticket != committedMapWebGeneration) return
         if (!mapBusy) return
         mapBusy = false
         refreshGlobalBusyProgress()
+        captureMapViewIfCurrent(webViewFinished, ticket)
+    }
+
+    private fun captureMapViewIfCurrent(wv: WebView, ticket: Int) {
+        wv.post {
+            if ((wv.tag as? Int) != ticket) return@post
+            wv.evaluateJavascript(
+                "(function(){try{if(typeof map==='undefined'||!map.getCenter)return null;" +
+                    "var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
+            ) { raw ->
+                if ((wv.tag as? Int) != ticket) return@evaluateJavascript
+                parseJsMapView(raw)?.let { lastMapView = it }
+            }
+        }
+    }
+
+    private fun parseJsMapView(raw: String?): Triple<Double, Double, Int>? {
+        if (raw.isNullOrBlank() || raw == "null") return null
+        return try {
+            val arr = JSONArray(raw)
+            if (arr.length() < 3) return null
+            Triple(arr.getDouble(0), arr.getDouble(1), arr.getInt(2))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun fitMapToVisibleSelection() {
+        val paths = checkedPaths()
+        if (paths.isEmpty()) {
+            Toast.makeText(this, R.string.fit_map_need_selection, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val pathsJson = JSONArray(paths).toString()
+        mapRenderExecutor.execute {
+            val jsonRaw: String? =
+                try {
+                    val py = Python.getInstance()
+                    val module = py.getModule("bridge")
+                    module.callAttr("fit_bounds_corners", pathsJson).toString()
+                } catch (_: Throwable) {
+                    null
+                }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                applyFitBoundsCornersResult(jsonRaw)
+            }
+        }
+    }
+
+    private fun applyFitBoundsCornersResult(jsonRaw: String?) {
+        if (jsonRaw.isNullOrBlank()) {
+            Toast.makeText(this, getString(R.string.gpx_parse_error), Toast.LENGTH_LONG).show()
+            return
+        }
+        val obj =
+            try {
+                JSONObject(jsonRaw)
+            } catch (_: Exception) {
+                Toast.makeText(this, getString(R.string.gpx_parse_error), Toast.LENGTH_LONG).show()
+                return
+            }
+        if (!obj.optBoolean("ok", false)) {
+            when (obj.optString("error")) {
+                "no_paths" ->
+                    Toast.makeText(this, R.string.fit_map_need_selection, Toast.LENGTH_SHORT).show()
+                "no_coordinates" ->
+                    Toast.makeText(this, R.string.gpx_empty_features, Toast.LENGTH_LONG).show()
+                else ->
+                    Toast.makeText(
+                        this,
+                        obj.optString("error", getString(R.string.gpx_parse_error)),
+                        Toast.LENGTH_LONG,
+                    ).show()
+            }
+            return
+        }
+        val corners = obj.optJSONArray("corners") ?: return
+        val lit = corners.toString()
+        val ticket = webView.tag as? Int ?: return
+        webView.evaluateJavascript(
+            "(function(){try{map.fitBounds($lit);var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
+        ) { raw ->
+            if ((webView.tag as? Int) != ticket) return@evaluateJavascript
+            parseJsMapView(raw)?.let { lastMapView = it }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -570,12 +679,15 @@ class MainActivity : AppCompatActivity() {
         mapBusy = true
         refreshGlobalBusyProgress()
         val pathsJson = JSONArray(checkedPaths()).toString()
+        val mapViewJson =
+            lastMapView?.let { JSONArray(listOf(it.first, it.second, it.third)).toString() }
+                ?: "null"
         mapRenderExecutor.execute {
             val jsonRaw: String? =
                 try {
                     val py = Python.getInstance()
                     val module = py.getModule("bridge")
-                    module.callAttr("render", pathsJson).toString()
+                    module.callAttr("render", pathsJson, mapViewJson).toString()
                 } catch (_: Throwable) {
                     null
                 }
@@ -744,6 +856,9 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val STATE_FILE_PANEL_VISIBLE = "file_panel_visible"
+        const val STATE_MAP_LAT = "map_lat"
+        const val STATE_MAP_LON = "map_lon"
+        const val STATE_MAP_ZOOM = "map_zoom"
         const val PREFS_NAME = "gpxlink"
         const val KEY_GPX_ITEMS = "gpx_selection_v1"
         const val PROJECT_FORMAT = "gpx-link-project"
