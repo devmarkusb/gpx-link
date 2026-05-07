@@ -29,9 +29,10 @@
         android:orientation="horizontal">
 
         <LinearLayout
+            android:id="@+id/file_panel"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="35"
+            android:layout_weight="1"
             android:orientation="vertical">
 
             <LinearLayout
@@ -92,9 +93,10 @@
         </LinearLayout>
 
         <FrameLayout
+            android:id="@+id/map_panel"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="65">
+            android:layout_weight="1">
 
             <WebView
                 android:id="@+id/map_webview"

@@ -49,8 +49,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
     private lateinit var webView: WebView
     private lateinit var globalBusyProgress: LinearProgressIndicator
+    private lateinit var filePanel: View
+    private lateinit var mapPanel: View
     private lateinit var fileList: RecyclerView
-    private lateinit var gpxListActions: View
     private lateinit var adapter: GpxFileAdapter
     private val importExecutor = Executors.newSingleThreadExecutor()
     private val mapRenderExecutor = Executors.newSingleThreadExecutor()
@@ -194,10 +195,10 @@ class MainActivity : AppCompatActivity() {
         toolbar.setNavigationOnClickListener { showProjectMenu() }
 
         val panelVisible = savedInstanceState?.getBoolean(STATE_FILE_PANEL_VISIBLE, true) ?: true
-        gpxListActions = findViewById(R.id.gpx_list_actions)
+        filePanel = findViewById(R.id.file_panel)
+        mapPanel = findViewById(R.id.map_panel)
         fileList = findViewById(R.id.file_list)
         setFilePanelVisible(panelVisible)
-        toolbar.menu.findItem(R.id.action_toggle_file_list)?.isChecked = panelVisible
 
         savedInstanceState?.let { b ->
             if (b.containsKey(STATE_MAP_LAT) && b.containsKey(STATE_MAP_LON) && b.containsKey(STATE_MAP_ZOOM)) {
@@ -225,9 +226,8 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
                 R.id.action_toggle_file_list -> {
-                    val show = fileList.visibility != View.VISIBLE
+                    val show = filePanel.visibility != View.VISIBLE
                     setFilePanelVisible(show)
-                    item.isChecked = show
                     true
                 }
                 else -> false
@@ -271,7 +271,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putBoolean(STATE_FILE_PANEL_VISIBLE, fileList.visibility == View.VISIBLE)
+        outState.putBoolean(STATE_FILE_PANEL_VISIBLE, filePanel.visibility == View.VISIBLE)
         lastMapView?.let {
             outState.putDouble(STATE_MAP_LAT, it.first)
             outState.putDouble(STATE_MAP_LON, it.second)
@@ -280,9 +280,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setFilePanelVisible(visible: Boolean) {
-        val v = if (visible) View.VISIBLE else View.GONE
-        gpxListActions.visibility = v
-        fileList.visibility = v
+        filePanel.visibility = if (visible) View.VISIBLE else View.GONE
+        mapPanel.visibility = if (visible) View.GONE else View.VISIBLE
+        updateFilePanelMenuItem(visible)
+    }
+
+    private fun updateFilePanelMenuItem(filePanelVisible: Boolean) {
+        val item = toolbar.menu.findItem(R.id.action_toggle_file_list) ?: return
+        item.isChecked = filePanelVisible
+        item.title =
+            getString(if (filePanelVisible) R.string.show_map else R.string.gpx_file_list)
+        item.icon =
+            ContextCompat.getDrawable(
+                this,
+                if (filePanelVisible) R.drawable.ic_map_24 else R.drawable.ic_gpx_list_24,
+            )
     }
 
     private fun showProjectMenu() {
@@ -348,7 +360,7 @@ class MainActivity : AppCompatActivity() {
             .apply {
                 put("format", PROJECT_FORMAT)
                 put("version", PROJECT_VERSION)
-                put("show_file_panel", fileList.visibility == View.VISIBLE)
+                put("show_file_panel", filePanel.visibility == View.VISIBLE)
                 put("map_view", JSONObject.NULL)
                 put("splitter_state_b64", JSONObject.NULL)
                 put("files", files)
@@ -379,7 +391,6 @@ class MainActivity : AppCompatActivity() {
         adapter.notifyDataSetChanged()
         val showPanel = root.optBoolean("show_file_panel", true)
         setFilePanelVisible(showPanel)
-        toolbar.menu.findItem(R.id.action_toggle_file_list)?.isChecked = showPanel
         persistGpxSelection()
         lastMapView = null
         reloadMap()
