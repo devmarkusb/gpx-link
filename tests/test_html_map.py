@@ -24,8 +24,9 @@ def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
     assert "45.5" in html and "-122.5" in html
     assert "map.fitBounds" in html
     assert "preferCanvas" in html
-    assert "gpx-poi-inner" in html
-    assert "L.divIcon" in html
+    assert "fadeAnimation" in html
+    assert "vectorRenderer" in html
+    assert "L.circleMarker" in html
     assert "poiVisual" in html
     assert "gpxLinkSetUserLocation" in html
     assert "gpxLinkApplyPayload" in html
