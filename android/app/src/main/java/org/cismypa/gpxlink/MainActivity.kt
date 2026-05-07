@@ -45,6 +45,13 @@ import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
+    /**
+     * WebView tag after each [applyMapPayload]: distinguishes stale [WebViewClient.onPageFinished]
+     * callbacks and carries the pan/zoom we embedded (so [lastMapView] can be committed synchronously
+     * without waiting for [WebView.evaluateJavascript]).
+     */
+    private data class MapWebState(val ticket: Int, val preservedPanZoom: Triple<Double, Double, Int>?)
+
     private val gpxItems = mutableListOf<GpxListItem>()
     private lateinit var toolbar: MaterialToolbar
     private lateinit var webView: WebView
@@ -467,10 +474,13 @@ class MainActivity : AppCompatActivity() {
         globalBusyProgress.isVisible = busy
     }
 
-    private fun applyMapPayload(rq: Int, jsonPayload: JSONObject) {
+    private fun applyMapPayload(
+        rq: Int,
+        jsonPayload: JSONObject,
+        preservedPanZoom: Triple<Double, Double, Int>?,
+    ) {
         if (rq != renderRequestGeneration) {
-            mapBusy = false
-            refreshGlobalBusyProgress()
+            // A newer [reloadMap] is in flight; keep mapBusy as that pass owns it.
             return
         }
 
@@ -498,7 +508,7 @@ class MainActivity : AppCompatActivity() {
 
         committedMapWebGeneration += 1
         val ticket = committedMapWebGeneration
-        webView.tag = ticket
+        webView.tag = MapWebState(ticket, preservedPanZoom)
         webView.loadDataWithBaseURL(
             "https://cdn.jsdelivr.net/",
             html,
@@ -510,22 +520,27 @@ class MainActivity : AppCompatActivity() {
 
     private fun onMapWebPageFinished(webViewFinished: WebView) {
         if (webViewFinished !== webView) return
-        val ticket = webViewFinished.tag as? Int ?: return
-        if (ticket != committedMapWebGeneration) return
+        val state = webViewFinished.tag as? MapWebState ?: return
+        if (state.ticket != committedMapWebGeneration) return
         if (!mapBusy) return
         mapBusy = false
         refreshGlobalBusyProgress()
-        captureMapViewIfCurrent(webViewFinished, ticket)
+        val preserved = state.preservedPanZoom
+        if (preserved != null) {
+            lastMapView = preserved
+        } else {
+            captureMapViewIfCurrent(webViewFinished, state.ticket)
+        }
     }
 
     private fun captureMapViewIfCurrent(wv: WebView, ticket: Int) {
         wv.post {
-            if ((wv.tag as? Int) != ticket) return@post
+            if ((wv.tag as? MapWebState)?.ticket != ticket) return@post
             wv.evaluateJavascript(
                 "(function(){try{if(typeof map==='undefined'||!map.getCenter)return null;" +
                     "var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
             ) { raw ->
-                if ((wv.tag as? Int) != ticket) return@evaluateJavascript
+                if ((wv.tag as? MapWebState)?.ticket != ticket) return@evaluateJavascript
                 parseJsMapView(raw)?.let { lastMapView = it }
             }
         }
@@ -594,11 +609,11 @@ class MainActivity : AppCompatActivity() {
         }
         val corners = obj.optJSONArray("corners") ?: return
         val lit = corners.toString()
-        val ticket = webView.tag as? Int ?: return
+        val ticket = (webView.tag as? MapWebState)?.ticket ?: return
         webView.evaluateJavascript(
             "(function(){try{map.fitBounds($lit,{animate:false});var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
         ) { raw ->
-            if ((webView.tag as? Int) != ticket) return@evaluateJavascript
+            if ((webView.tag as? MapWebState)?.ticket != ticket) return@evaluateJavascript
             parseJsMapView(raw)?.let { lastMapView = it }
         }
     }
@@ -690,8 +705,11 @@ class MainActivity : AppCompatActivity() {
         mapBusy = true
         refreshGlobalBusyProgress()
         val pathsJson = JSONArray(checkedPaths()).toString()
+        // Snapshot before any async work: lastMapView is only updated async via JS unless we
+        // commit preservedPanZoom on page finish — without this, rapid toggles see null and refit.
+        val preservedPanZoom = lastMapView
         val mapViewJson =
-            lastMapView?.let { JSONArray(listOf(it.first, it.second, it.third)).toString() }
+            preservedPanZoom?.let { JSONArray(listOf(it.first, it.second, it.third)).toString() }
                 ?: "null"
         mapRenderExecutor.execute {
             val jsonRaw: String? =
@@ -705,8 +723,6 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (rq != renderRequestGeneration) {
-                    mapBusy = false
-                    refreshGlobalBusyProgress()
                     return@runOnUiThread
                 }
                 if (jsonRaw == null) {
@@ -732,7 +748,7 @@ class MainActivity : AppCompatActivity() {
                         refreshGlobalBusyProgress()
                         return@runOnUiThread
                     }
-                applyMapPayload(rq, obj)
+                applyMapPayload(rq, obj, preservedPanZoom)
             }
         }
     }
