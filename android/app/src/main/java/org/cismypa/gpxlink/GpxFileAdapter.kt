@@ -26,13 +26,14 @@ class GpxFileAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
         holder.label.text = item.displayName
-        holder.check.setOnCheckedChangeListener(null)
         holder.check.isChecked = item.checked
-        holder.check.setOnCheckedChangeListener { _, checked ->
-            if (item.checked != checked) {
-                item.checked = checked
-                onChanged()
-            }
+        holder.itemView.setOnClickListener {
+            val pos = holder.bindingAdapterPosition
+            if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
+            val rowItem = items.getOrNull(pos) ?: return@setOnClickListener
+            rowItem.checked = !rowItem.checked
+            holder.check.isChecked = rowItem.checked
+            onChanged()
         }
         val rowLongPress = View.OnLongClickListener {
             val pos = holder.bindingAdapterPosition
@@ -42,8 +43,6 @@ class GpxFileAdapter(
             true
         }
         holder.itemView.setOnLongClickListener(rowLongPress)
-        holder.check.setOnLongClickListener(rowLongPress)
-        holder.label.setOnLongClickListener(rowLongPress)
     }
 
     override fun getItemCount(): Int = items.size
