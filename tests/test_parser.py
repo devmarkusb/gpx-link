@@ -22,9 +22,13 @@ def test_load_waypoints_parses_names_and_coords(tmp_path: Path) -> None:
     assert wpts[0].longitude == -122.5
     assert wpts[0].elevation_m == 100.0
     assert wpts[0].description == "First"
+    assert wpts[0].waypoint_type == "Trailhead"
+    assert wpts[0].symbol == "Trail Head"
     assert wpts[0].source_path == p.resolve()
     assert wpts[1].name == "Beta"
     assert wpts[1].elevation_m is None
+    assert wpts[1].symbol is None
+    assert wpts[1].waypoint_type is None
 
 
 def test_load_empty_waypoints(tmp_path: Path) -> None:

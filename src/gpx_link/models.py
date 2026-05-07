@@ -15,6 +15,10 @@ class Waypoint:
     longitude: float
     elevation_m: float | None = None
     description: str | None = None
+    #: GPX ``<sym>`` (Garmin-style symbol name, when present).
+    symbol: str | None = None
+    #: GPX ``<type>`` — POI category / label from the file.
+    waypoint_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
