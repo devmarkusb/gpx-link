@@ -58,3 +58,6 @@ coverage.xml
 
 # Chaquopy: synced copy of src/gpx_link (see syncGpxLinkPython in android/app/build.gradle.kts)
 /android/app/src/main/python/gpx_link/
+
+# Play “What’s new”: generated from locale whatsnew.txt before fastlane upload (see android/fastlane/Fastfile).
+/android/fastlane/metadata/android/*/changelogs/[0-9]*.txt
