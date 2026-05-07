@@ -10,5 +10,6 @@
         android:title="@string/gpx_file_list"
         android:checkable="true"
         android:checked="true"
-        app:showAsAction="never" />
+        android:icon="@drawable/ic_gpx_list_24"
+        app:showAsAction="always" />
 </menu>
