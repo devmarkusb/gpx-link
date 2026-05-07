@@ -3,7 +3,7 @@ name: Android Play release
 # Builds a signed release AAB (Google Play default) and APK, attaches them to the GitHub
 # release for tag v*, and optionally uploads to Play Console when PLAY_SERVICE_ACCOUNT_JSON is set.
 #
-# Required GitHub secrets for signed builds:
+# Required GitHub secrets for signed builds (skipped when workflow_dispatch + metadata_only):
 #   ANDROID_KEYSTORE_BASE64   — base64 of the upload keystore .jks
 #   ANDROID_KEYSTORE_PASSWORD
 #   ANDROID_KEY_ALIAS
@@ -14,6 +14,10 @@ name: Android Play release
 #   PLAY_RELEASE_STATUS — e.g. draft. Required while the Play listing is still a “draft app”
 #   (Google only allows draft releases until the first production rollout). Omit or use
 #   completed once the app is no longer in that state (Fastlane default is completed).
+#
+# Manual “Metadata only” run: workflow_dispatch with metadata_only=true skips the Gradle build and
+# runs Fastlane upload_play_metadata_only (listing + screenshots). Requires PLAY_SERVICE_ACCOUNT_JSON
+# only — no keystore. Does not upload an AAB, so no version bump is required.
 
 on:
   push:
@@ -32,7 +36,12 @@ on:
           - beta
           - production
       upload_store_listing:
-        description: Push fastlane metadata to Play (listing text, graphics, changelogs)
+        description: With a normal release run — also push fastlane metadata (requires built AAB)
+        required: false
+        default: false
+        type: boolean
+      metadata_only:
+        description: Listing/screenshots only — no build, no AAB (no version bump needed)
         required: false
         default: false
         type: boolean
@@ -51,12 +60,14 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up JDK 17
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.metadata_only) }}
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Decode upload keystore
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.metadata_only) }}
         working-directory: android
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -80,6 +91,7 @@ jobs:
           fi
 
       - name: Write keystore.properties
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.metadata_only) }}
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -111,6 +123,7 @@ jobs:
           } > keystore.properties
 
       - name: Verify keystore (keytool)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.metadata_only) }}
         working-directory: android
         env:
           STORE_PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -132,12 +145,14 @@ jobs:
           fi
 
       - name: Gradle release bundle + APK
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.metadata_only) }}
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon bundleRelease assembleRelease
 
       - name: Upload build artifacts
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.metadata_only) }}
         uses: actions/upload-artifact@v7
         with:
           name: gpx-link-android-release
@@ -146,7 +161,7 @@ jobs:
             android/app/build/outputs/apk/release/*.apk
 
       - name: Attach AAB and APK to GitHub Release (tag builds only)
-        if: github.ref_type == 'tag'
+        if: ${{ github.ref_type == 'tag' && !(github.event_name == 'workflow_dispatch' && inputs.metadata_only) }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -174,7 +189,9 @@ jobs:
             echo "PLAY_SERVICE_ACCOUNT_JSON not set; skipping Play upload."
             exit 0
           fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.upload_store_listing }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.metadata_only }}" = "true" ]; then
+            bundle exec fastlane upload_play_metadata_only "track:$PLAY_TRACK"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.upload_store_listing }}" = "true" ]; then
             bundle exec fastlane upload_play_with_metadata "track:$PLAY_TRACK"
           else
             bundle exec fastlane upload_play "track:$PLAY_TRACK"
