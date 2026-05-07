@@ -12,9 +12,10 @@ from gpx_link.simplify import simplify_polyline_points
 _LEAFLET_CSS = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
 _LEAFLET_JS = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
 
-# Mobile WebView: huge polylines inflate HTML/JS parse; many DOM markers tank FPS.
-_MAX_VERTICES_PER_LINE = 7000
-_EPSILON_M_TRACK = 14.0
+# Mobile WebView / Qt WebEngine: huge polylines inflate HTML/JS parse;
+# many DOM markers (divIcon) tank pan/zoom FPS — prefer canvas circleMarkers.
+_MAX_VERTICES_PER_LINE = 5000
+_EPSILON_M_TRACK = 18.0
 
 # Default: derive fit bounds from all waypoints and paths (CLI / Android / tests).
 _USE_BOUNDS_FROM_FEATURES = object()
@@ -120,24 +121,6 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
   <style>
     html, body, #map {{ height: 100%; margin: 0; }}
     body {{ font-family: system-ui, sans-serif; }}
-    .gpx-poi-marker {{
-      background: none !important;
-      border: none !important;
-    }}
-    .gpx-poi-inner {{
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      border: 2px solid #334155;
-      background: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-      line-height: 1;
-      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
-      box-sizing: border-box;
-    }}
   </style>
 </head>
 <body>
@@ -233,12 +216,12 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
         borderColor: 'hsl(' + hue + ', 52%, 42%)',
       }};
     }}
-    function poiMarkerHtml(visual) {{
-      const st = 'border-color:' + visual.borderColor;
-      return '<div class="gpx-poi-inner" style="' + st + '">' + visual.emoji + '</div>';
-    }}
-    function poiTooltipHtml(m) {{
-      let out = escHtml(m.name);
+    function poiTooltipHtml(m, visual) {{
+      let out =
+        '<span style="font-size:1.15em;line-height:1">' +
+        escHtml(visual.emoji) +
+        '</span><br />' +
+        escHtml(m.name);
       const typ = (m.waypointType || '').trim();
       const sym = (m.symbol || '').trim();
       if (typ) {{
@@ -255,9 +238,15 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       }}
       return out;
     }}
-    const map = L.map('map', {{ preferCanvas: true }});
+    const map = L.map('map', {{
+      preferCanvas: true,
+      fadeAnimation: false,
+      zoomAnimation: true,
+    }});
+    const vectorRenderer = L.canvas({{ padding: 0.5 }});
     L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
       maxZoom: 19,
+      fadeAnimation: false,
       attribution: '&copy; OpenStreetMap contributors'
     }}).addTo(map);
     map.setView([20, 0], 2);
@@ -271,16 +260,18 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       const paths = payload.paths || [];
       for (const m of markers) {{
         const vis = poiVisual(m.symbol, m.waypointType, m.name);
-        const icon = L.divIcon({{
-          className: 'gpx-poi-marker',
-          html: poiMarkerHtml(vis),
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
+        const marker = L.circleMarker([m.lat, m.lon], {{
+          renderer: vectorRenderer,
+          radius: 8,
+          color: vis.borderColor,
+          weight: 2,
+          fillColor: '#ffffff',
+          fillOpacity: 0.92,
+        }}).addTo(window._gpxContentGroup);
+        marker.bindTooltip(poiTooltipHtml(m, vis), {{
+          sticky: false,
+          direction: 'top',
         }});
-        const marker = L.marker([m.lat, m.lon], {{ icon: icon }}).addTo(
-          window._gpxContentGroup,
-        );
-        marker.bindTooltip(poiTooltipHtml(m), {{ sticky: true }});
         marker.on('click', function () {{
           window.open(m.gmaps, '_blank', 'noopener,noreferrer');
         }});
@@ -290,8 +281,13 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
         const coords = p.coords;
         const layer =
           coords.length >= 2
-            ? L.polyline(coords, style).addTo(window._gpxContentGroup)
+            ? L.polyline(coords, {{
+                ...style,
+                renderer: vectorRenderer,
+                smoothFactor: 1.35,
+              }}).addTo(window._gpxContentGroup)
             : L.circleMarker(coords[0], {{
+                renderer: vectorRenderer,
                 radius: 6,
                 color: style.color,
                 weight: 2,
@@ -303,7 +299,7 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
           '<br /><span style=\"opacity:.75;font-size:.85em;\">' +
           escHtml(p.kind) +
           '</span>';
-        layer.bindTooltip(tip, {{ sticky: true }});
+        layer.bindTooltip(tip, {{ sticky: false }});
       }}
       window._gpxContentGroup.addTo(map);
       const fitBounds = payload.fitBounds;
@@ -321,8 +317,15 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
         map.removeLayer(userLocMarker);
       }}
       const tip = label ? escHtml(label) : 'Current location';
-      userLocMarker = L.marker([lat, lng]).addTo(map);
-      userLocMarker.bindTooltip(tip, {{ sticky: true }});
+      userLocMarker = L.circleMarker([lat, lng], {{
+        renderer: vectorRenderer,
+        radius: 11,
+        color: '#1d4ed8',
+        weight: 3,
+        fillColor: '#93c5fd',
+        fillOpacity: 0.95,
+      }}).addTo(map);
+      userLocMarker.bindTooltip(tip, {{ sticky: false }});
       const z = Math.max(map.getZoom(), 15);
       map.setView([lat, lng], z);
     }};
