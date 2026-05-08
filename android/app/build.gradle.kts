@@ -66,7 +66,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Native .so (Chaquopy): lets Play Console symbolicate JNI/native crashes.
+            // debugSymbolLevel only affects .so built by this module (CMake/ndk-build).
+            // Chaquopy ships prebuilt, stripped native libs — AGP emits no native-debug
+            // metadata (mergeReleaseNativeDebugMetadata NO-SOURCE), so Play may still
+            // warn until Chaquopy (or you) provides separate symbol archives.
             ndk {
                 debugSymbolLevel = "SYMBOL_TABLE"
             }
