@@ -174,6 +174,21 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
       box-sizing: border-box;
     }}
+    .gpx-base-toggle {{
+      background: #fff;
+      border: 2px solid rgba(0, 0, 0, 0.2);
+      border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+      cursor: pointer;
+      font: 600 13px/1 system-ui, sans-serif;
+      color: #1f2937;
+      min-width: 64px;
+      min-height: 44px;
+      padding: 0 12px;
+      box-sizing: border-box;
+    }}
+    .gpx-base-toggle:hover {{ background: #f1f5f9; }}
+    .gpx-base-toggle:active {{ background: #e2e8f0; }}
   </style>
 </head>
 <body>
@@ -307,11 +322,46 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       zoom: {boot_zoom},
     }});
     const vectorRenderer = L.canvas({{ padding: 0.5 }});
-    L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-      maxZoom: 19,
-      fadeAnimation: false,
-      attribution: '&copy; OpenStreetMap contributors'
-    }}).addTo(map);
+    const baseLayers = {{
+      osm: L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+        maxZoom: 19,
+        fadeAnimation: false,
+        attribution: '&copy; OpenStreetMap contributors'
+      }}),
+      topo: L.tileLayer('https://{{s}}.tile.opentopomap.org/{{z}}/{{x}}/{{y}}.png', {{
+        maxZoom: 17,
+        fadeAnimation: false,
+        attribution:
+          'Map data: &copy; OpenStreetMap contributors, SRTM | ' +
+          'Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> ' +
+          '(CC-BY-SA)'
+      }}),
+    }};
+    let currentBaseKey = 'osm';
+    baseLayers.osm.addTo(map);
+
+    const BaseToggleControl = L.Control.extend({{
+      options: {{ position: 'topright' }},
+      onAdd: function () {{
+        const btn = L.DomUtil.create('button', 'gpx-base-toggle');
+        btn.type = 'button';
+        btn.title = 'Toggle base map (Street / Topographic)';
+        btn.setAttribute('aria-label', btn.title);
+        btn.textContent = 'Topo';
+        L.DomEvent.disableClickPropagation(btn);
+        L.DomEvent.disableScrollPropagation(btn);
+        L.DomEvent.on(btn, 'click', function (ev) {{
+          L.DomEvent.stop(ev);
+          const nextKey = currentBaseKey === 'osm' ? 'topo' : 'osm';
+          map.removeLayer(baseLayers[currentBaseKey]);
+          baseLayers[nextKey].addTo(map);
+          currentBaseKey = nextKey;
+          btn.textContent = nextKey === 'osm' ? 'Topo' : 'Map';
+        }});
+        return btn;
+      }},
+    }});
+    new BaseToggleControl().addTo(map);
 
     const GPX_DOM_POI_LIMIT = {_DOM_POI_MARKER_LIMIT};
     const GPX_POI_VIEW_PAD = {_POI_VIEW_PAD};
