@@ -39,6 +39,14 @@ def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
     assert google_maps_url(46.0, -123.0, name="B") in html
 
 
+def test_build_leaflet_html_has_base_layer_toggle() -> None:
+    html = build_leaflet_html([])
+    assert "tile.openstreetmap.org" in html
+    assert "tile.opentopomap.org" in html
+    assert "BaseToggleControl" in html
+    assert "gpx-base-toggle" in html
+
+
 def test_build_leaflet_html_empty_world_view() -> None:
     html = build_leaflet_html([])
     assert "center: [20.0, 0.0]" in html
