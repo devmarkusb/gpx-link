@@ -61,6 +61,7 @@ android {
         versionName = playVersionName
         manifestPlaceholders["admobAppId"] = admobTestAppId
         buildConfigField("String", "REMOVE_ADS_PRODUCT_ID", "\"$removeAdsProductId\"")
+        buildConfigField("String", "DEBUG_ADMOB_TEST_DEVICE_IDS", "\"\"")
         resValue("string", "admob_banner_unit_id", "ca-app-pub-3940256099942544/6300978111")
         // Chaquopy Python 3.12 ships native libs only for arm64-v8a and x86_64.
         ndk {
@@ -82,6 +83,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            val raw =
+                System.getenv("DEBUG_ADMOB_TEST_DEVICE_IDS")?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: ((project.findProperty("gpxlink.debugAdmobTestDeviceIds") as String?)?.trim()
+                        ?: "")
+            val escaped = raw.replace("\\", "\\\\").replace("\"", "\\\"")
+            buildConfigField("String", "DEBUG_ADMOB_TEST_DEVICE_IDS", "\"$escaped\"")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
