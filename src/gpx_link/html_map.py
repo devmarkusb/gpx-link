@@ -16,6 +16,9 @@ _LEAFLET_JS = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
 # DOM emoji markers are limited to when ≤ this many POIs lie in the map view
 # (see JS); otherwise canvas dots for POIs currently in view.
 _DOM_POI_MARKER_LIMIT = 1000
+# When ≤ this many POIs are in the padded viewport, show name tooltips always
+# (permanent) so users can read labels without clicking (click still opens Maps).
+_POI_AUTO_TOOLTIP_LIMIT = 25
 # Leaflet bounds.pad() — widen “in view” so edge markers do not flicker.
 _POI_VIEW_PAD = 0.12
 _MAX_VERTICES_PER_LINE = 5000
@@ -364,6 +367,7 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
     new BaseToggleControl().addTo(map);
 
     const GPX_DOM_POI_LIMIT = {_DOM_POI_MARKER_LIMIT};
+    const GPX_POI_AUTO_TOOLTIP_LIMIT = {_POI_AUTO_TOOLTIP_LIMIT};
     const GPX_POI_VIEW_PAD = {_POI_VIEW_PAD};
     function gpxDebounce(fn, waitMs) {{
       let tid = null;
@@ -405,6 +409,7 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
           }}
         }}
         const useDom = inViewCount <= GPX_DOM_POI_LIMIT;
+        const poiTipsPermanent = inViewCount <= GPX_POI_AUTO_TOOLTIP_LIMIT;
         if (window._gpxPoiLayerGroup) {{
           window._gpxContentGroup.removeLayer(window._gpxPoiLayerGroup);
         }}
@@ -437,6 +442,7 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
           layer.bindTooltip(poiTooltipHtml(m, vis, useDom), {{
             sticky: false,
             direction: 'top',
+            permanent: poiTipsPermanent,
           }});
           layer.on('click', function () {{
             window.open(m.gmaps, '_blank', 'noopener,noreferrer');
