@@ -116,4 +116,10 @@
                 app:tint="@color/md_theme_on_primary" />
         </FrameLayout>
     </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/ad_banner_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone" />
 </LinearLayout>

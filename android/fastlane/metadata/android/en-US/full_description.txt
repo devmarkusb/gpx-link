@@ -11,7 +11,7 @@ Maps GPX is a lightweight viewer for GPX files on Android. Open tracks and waypo
 Campers, hikers, cyclists, runners, and anyone who already has GPX exports and wants a fast map-first view on their phone—without turning it into a social platform or account-based service.
 
 <b>Privacy</b>
-The app loads map tiles and scripts over the network (OpenStreetMap / CDNs) when you view the map. It does not require a Maps GPX account. See the project documentation for details on data handling you publish alongside the store listing.
+The app loads map tiles and scripts over the network (OpenStreetMap / CDNs) when you view the map. It may show third-party banner ads; you can remove ads permanently with a one-time in-app purchase from the project menu. It does not require a Maps GPX account. See the project documentation for details on data handling you publish alongside the store listing.
 
 <b>Open source</b>
 Built from the same GPX rendering core as the gpx-link project on GitHub—handy if you use the desktop or CLI tools too.

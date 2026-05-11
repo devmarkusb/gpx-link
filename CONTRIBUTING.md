@@ -102,6 +102,8 @@ Runs on **push** of a **`v*`** tag, on **manual `workflow_dispatch`**, or when *
 
 Optional: **`PLAY_SERVICE_ACCOUNT_JSON`** — JSON key for the Play Developer API. If unset, the workflow still builds and uploads artifacts to the GitHub run (and attaches **AAB/APK** to the GitHub **Release** when the ref is a **`v*`** tag); it **skips** calling Fastlane upload.
 
+Optional (recommended before **production** AdMob / billing): **`ADMOB_APPLICATION_ID`**, **`ADMOB_BANNER_UNIT_ID`**, **`PLAY_REMOVE_ADS_PRODUCT_ID`** — passed into the Gradle release step so the signed build uses your real AdMob app id, banner ad unit, and in-app product id. If unset, release still builds using Google’s **test** AdMob ids from `android/app/build.gradle.kts` (fine for internal testing; replace for store monetization). Local overrides are also supported via `android/gradle.properties` (`gpxlink.*` keys); see **`android/fastlane/metadata/android/en-US/play_store_notes.txt`**.
+
 Manual runs can choose Play **track** (`internal`, `alpha`, `beta`, `production`) and, with **Push fastlane metadata to Play** enabled, upload the full **store listing** (not only the binary): titles, descriptions, promotional text, **graphics** (icon, feature graphic, screenshots), and **per-version release notes**. Tag-triggered runs upload the **AAB only** unless you change the workflow; use **workflow_dispatch** with that checkbox when you want listing assets pushed.
 
 ### Play store listing (Fastlane, English US)

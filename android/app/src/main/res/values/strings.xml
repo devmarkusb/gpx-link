@@ -30,4 +30,9 @@
     <string name="project_version">Unsupported project file version.</string>
     <string name="project_no_files">Project file has no file list.</string>
     <string name="project_missing_paths">Some paths were skipped (file not found).</string>
+    <string name="remove_ads">Remove ads…</string>
+    <string name="restore_purchases">Restore purchases</string>
+    <string name="remove_ads_already_owned">You already have the ad-free upgrade.</string>
+    <string name="remove_ads_thanks">Thank you — ads are now removed.</string>
+    <string name="restore_purchases_done">Purchase state refreshed.</string>
 </resources>

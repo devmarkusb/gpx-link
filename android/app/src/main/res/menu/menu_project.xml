@@ -9,4 +9,10 @@
     <item
         android:id="@+id/action_project_load"
         android:title="@string/project_load" />
+    <item
+        android:id="@+id/action_remove_ads"
+        android:title="@string/remove_ads" />
+    <item
+        android:id="@+id/action_restore_purchases"
+        android:title="@string/restore_purchases" />
 </menu>

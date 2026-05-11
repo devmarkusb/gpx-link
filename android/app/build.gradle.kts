@@ -30,9 +30,28 @@ val pyprojectToml = repoRoot.resolve("pyproject.toml")
 val (playVersionCode, playVersionName) = readVersionFromPyproject(pyprojectToml)
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 
+/** Google test app id (AdMob) — safe for debug and CI; set real id for production release (see gradle.properties). */
+val admobTestAppId = "ca-app-pub-3940256099942544~3347511713"
+fun envOrProperty(envName: String, propName: String): String? {
+    val fromEnv = System.getenv(envName)?.trim()?.takeIf { it.isNotEmpty() }
+    if (fromEnv != null) return fromEnv
+    return (project.findProperty(propName) as String?)?.trim()?.takeIf { it.isNotEmpty() }
+}
+
+val admobAppIdRelease = envOrProperty("ADMOB_APPLICATION_ID", "gpxlink.admobAppId") ?: admobTestAppId
+val admobBannerUnitRelease =
+    envOrProperty("ADMOB_BANNER_UNIT_ID", "gpxlink.admobBannerUnitId")
+        ?: "ca-app-pub-3940256099942544/6300978111"
+val removeAdsProductId =
+    envOrProperty("PLAY_REMOVE_ADS_PRODUCT_ID", "gpxlink.removeAdsProductId") ?: "remove_ads"
+
 android {
     namespace = "org.cismypa.gpxlink"
     compileSdk = 35
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "org.cismypa.gpxlink"
@@ -40,6 +59,9 @@ android {
         targetSdk = 35
         versionCode = playVersionCode
         versionName = playVersionName
+        manifestPlaceholders["admobAppId"] = admobTestAppId
+        buildConfigField("String", "REMOVE_ADS_PRODUCT_ID", "\"$removeAdsProductId\"")
+        resValue("string", "admob_banner_unit_id", "ca-app-pub-3940256099942544/6300978111")
         // Chaquopy Python 3.12 ships native libs only for arm64-v8a and x86_64.
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
@@ -66,6 +88,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            manifestPlaceholders["admobAppId"] = admobAppIdRelease
+            resValue("string", "admob_banner_unit_id", admobBannerUnitRelease)
             // debugSymbolLevel only affects .so built by this module (CMake/ndk-build).
             // Chaquopy ships prebuilt, stripped native libs — AGP emits no native-debug
             // metadata (mergeReleaseNativeDebugMetadata NO-SOURCE), so Play may still
@@ -124,4 +148,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
+    implementation("com.android.billingclient:billing-ktx:7.1.1")
+    implementation("com.google.android.ump:user-messaging-platform:3.1.0")
 }
