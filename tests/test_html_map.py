@@ -29,6 +29,7 @@ def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
     assert "L.divIcon" in html
     assert "gpx-poi-inner" in html
     assert "GPX_DOM_POI_LIMIT" in html
+    assert "GPX_POI_AUTO_TOOLTIP_LIMIT" in html
     assert "GPX_POI_VIEW_PAD" in html
     assert "refreshGpxPoiMarkers" in html
     assert "L.circleMarker" in html
