@@ -28,3 +28,13 @@ Still needed in Play Console (not in this folder)
   • Target audience / news apps declarations as applicable
   • Data safety form (aligned with how you describe network use)
   • Optional: promo video YouTube URL
+
+Ads and “remove ads” purchase (in-app)
+--------------------------------------
+The Android app uses **Google AdMob** (banner) and **Play Billing** for a **one-time** in-app product that turns off ads. Code product id defaults to **`remove_ads`** — create a **managed product** (one-time purchase) in Play Console with the **exact same product id**, or override via **`gpxlink.removeAdsProductId`** / **`PLAY_REMOVE_ADS_PRODUCT_ID`** (see `android/gradle.properties` comments).
+
+**AdMob:** Create an app + **banner** ad unit in [AdMob](https://admob.google.com/). For **release** builds set **`ADMOB_APPLICATION_ID`** (form `ca-app-pub-…~…`) and **`ADMOB_BANNER_UNIT_ID`** (`ca-app-pub-…/…`) as repository secrets for CI, or set **`gpxlink.admobAppId`** / **`gpxlink.admobBannerUnitId`** in `android/gradle.properties` locally. Debug builds use Google’s official **test** app id and banner unit.
+
+**Consent (EEA / UK / CH):** The app runs the **User Messaging Platform (UMP)** consent form before initializing ads — link your AdMob account to a **Funding Choices** / consent message in AdMob as required for regulated regions.
+
+**Play Console checklist:** Monetize with ads → declare ad SDK; complete **Data safety** (advertising ID, approximate location if used, etc.); provide a **privacy policy** URL; in-app products → activate **`remove_ads`** (or your chosen id) and test with a **license tester** account before going live.

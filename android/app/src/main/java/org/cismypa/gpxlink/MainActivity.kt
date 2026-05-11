@@ -22,6 +22,7 @@ import android.webkit.WebViewClient
 import android.view.Gravity
 import android.view.MenuItem
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +37,12 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.AdListener
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -60,6 +67,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mapPanel: View
     private lateinit var fileList: RecyclerView
     private lateinit var adapter: GpxFileAdapter
+    private lateinit var adBannerContainer: FrameLayout
+    private var removeAdsBilling: RemoveAdsBilling? = null
+    private var mapBannerAdView: AdView? = null
+    private var lastNotifiedAdFree: Boolean? = null
     private val importExecutor = Executors.newSingleThreadExecutor()
     private val mapRenderExecutor = Executors.newSingleThreadExecutor()
     private var importBusy = false
@@ -274,6 +285,97 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+
+        adBannerContainer = findViewById(R.id.ad_banner_container)
+        setupAdsAndBilling()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mapBannerAdView?.resume()
+        removeAdsBilling?.refreshOwnedPurchases()
+    }
+
+    override fun onPause() {
+        mapBannerAdView?.pause()
+        super.onPause()
+    }
+
+    private fun setupAdsAndBilling() {
+        val billing =
+            RemoveAdsBilling(
+                activity = this,
+                productId = BuildConfig.REMOVE_ADS_PRODUCT_ID,
+                prefsName = PREFS_NAME,
+                onAdFreeChanged = { adFree -> runOnUiThread { applyAdFreeUi(adFree) } },
+            )
+        removeAdsBilling = billing
+        if (billing.isAdFreeCached()) {
+            adBannerContainer.visibility = View.GONE
+        }
+        requestAdsConsentThen(this) {
+            MobileAds.initialize(this) {}
+            removeAdsBilling?.start()
+            runOnUiThread { maybeShowBannerAd() }
+        }
+    }
+
+    private fun applyAdFreeUi(adFree: Boolean) {
+        val previous = lastNotifiedAdFree
+        if (adFree) {
+            mapBannerAdView?.destroy()
+            mapBannerAdView = null
+            adBannerContainer.removeAllViews()
+            adBannerContainer.visibility = View.GONE
+            if (previous == false) {
+                Toast.makeText(this, R.string.remove_ads_thanks, Toast.LENGTH_LONG).show()
+            }
+        } else {
+            adBannerContainer.visibility = View.VISIBLE
+            maybeShowBannerAd()
+        }
+        lastNotifiedAdFree = adFree
+    }
+
+    private fun maybeShowBannerAd() {
+        val billing = removeAdsBilling ?: return
+        if (billing.isAdFreeCached()) return
+        if (mapBannerAdView != null) return
+        val adView = AdView(this)
+        adView.adUnitId = getString(R.string.admob_banner_unit_id)
+        val adWidthDp =
+            (resources.displayMetrics.widthPixels / resources.displayMetrics.density)
+                .toInt()
+                .coerceIn(320, 720)
+        adView.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, adWidthDp))
+        adView.adListener =
+            object : AdListener() {
+                override fun onAdLoaded() {
+                    adBannerContainer.visibility = View.VISIBLE
+                }
+
+                override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    adBannerContainer.visibility = View.GONE
+                }
+            }
+        adBannerContainer.removeAllViews()
+        adBannerContainer.addView(adView)
+        mapBannerAdView = adView
+        adView.loadAd(AdRequest.Builder().build())
+    }
+
+    private fun promptRemoveAdsPurchase() {
+        val billing = removeAdsBilling ?: return
+        if (billing.isAdFreeCached()) {
+            Toast.makeText(this, R.string.remove_ads_already_owned, Toast.LENGTH_LONG).show()
+            return
+        }
+        billing.launchRemoveAdsPurchase()
+    }
+
+    private fun restorePurchases() {
+        removeAdsBilling?.refreshOwnedPurchases()
+        Toast.makeText(this, R.string.restore_purchases_done, Toast.LENGTH_SHORT).show()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -321,6 +423,14 @@ class MainActivity : AppCompatActivity() {
                         loadProjectLauncher.launch(
                             arrayOf("application/json", "application/*", "*/*"),
                         )
+                        true
+                    }
+                    R.id.action_remove_ads -> {
+                        promptRemoveAdsPurchase()
+                        true
+                    }
+                    R.id.action_restore_purchases -> {
+                        restorePurchases()
                         true
                     }
                     else -> false
@@ -464,6 +574,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        mapBannerAdView?.destroy()
+        mapBannerAdView = null
+        removeAdsBilling?.close()
+        removeAdsBilling = null
         importExecutor.shutdownNow()
         mapRenderExecutor.shutdownNow()
         super.onDestroy()
