@@ -314,6 +314,7 @@ class MainActivity : AppCompatActivity() {
             adBannerContainer.visibility = View.GONE
         }
         requestAdsConsentThen(this) {
+            applyAdMobDebugTestDeviceConfiguration()
             MobileAds.initialize(this) {}
             removeAdsBilling?.start()
             runOnUiThread { maybeShowBannerAd() }
@@ -406,9 +407,13 @@ class MainActivity : AppCompatActivity() {
             )
     }
 
+    private fun isAdFreeOwned(): Boolean =
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean(RemoveAdsBilling.PREF_KEY_AD_FREE, false)
+
     private fun showProjectMenu() {
         PopupMenu(this, toolbar, Gravity.START).apply {
             menuInflater.inflate(R.menu.menu_project, menu)
+            menu.findItem(R.id.action_remove_ads)?.isVisible = !isAdFreeOwned()
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     R.id.action_project_new -> {

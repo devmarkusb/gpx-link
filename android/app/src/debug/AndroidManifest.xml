@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Debug-only marker: test ads and device registration use AdMobTestDevices.kt + BuildConfig.DEBUG_ADMOB_TEST_DEVICE_IDS. -->
+        <meta-data
+            android:name="org.cismypa.gpxlink.ADMOB_DEBUG_BUILD"
+            android:value="true" />
+    </application>
+</manifest>
