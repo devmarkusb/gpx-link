@@ -33,16 +33,22 @@ jobs:
       - name: Validate commit messages (pull request)
         if: github.event_name == 'pull_request'
         run: |
-          uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
-            --from-ref "${{ github.event.pull_request.base.sha }}" \
-            --to-ref "${{ github.event.pull_request.head.sha }}"
+          set -euo pipefail
+          while read -r sha; do
+            git log -1 --pretty=%B "$sha" > /tmp/commit-msg.txt
+            uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
+              --commit-msg-filename /tmp/commit-msg.txt
+          done < <(git rev-list --reverse "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}")
 
       - name: Validate commit messages (push)
         if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
         run: |
-          uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
-            --from-ref "${{ github.event.before }}" \
-            --to-ref "${{ github.event.after }}"
+          set -euo pipefail
+          while read -r sha; do
+            git log -1 --pretty=%B "$sha" > /tmp/commit-msg.txt
+            uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
+              --commit-msg-filename /tmp/commit-msg.txt
+          done < <(git rev-list --reverse "${{ github.event.before }}..${{ github.event.after }}")
 
       - name: Validate commit messages (push, new ref)
         if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
