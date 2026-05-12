@@ -27,8 +27,10 @@ def main(argv: list[str] | None = None) -> int:
         from PySide6.QtWidgets import (
             QAbstractItemView,
             QApplication,
+            QComboBox,
             QFileDialog,
             QHBoxLayout,
+            QLabel,
             QListWidget,
             QListWidgetItem,
             QMainWindow,
@@ -58,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     _SHOW_FILE_PANEL_KEY = "show_file_panel"
     _SPLITTER_STATE_KEY = "main_splitter_state"
     _GPX_FILE_LIST_KEY = "gpx_file_list_v1"
+    _MARKER_LABELS_KEY = "marker_labels_mode"
     _PROJECT_FORMAT = "gpx-link-project"
     _PROJECT_VERSION = 1
     _PROJECT_FILTER = "GPX Link project (*.gpxlink.json);;All files (*)"
@@ -156,6 +159,36 @@ def main(argv: list[str] | None = None) -> int:
             self._action_file_panel.setChecked(show_panel)
             self._action_file_panel.toggled.connect(self._on_file_panel_toggled)
             tb.addAction(self._action_file_panel)
+
+            marker_wrap = QWidget()
+            marker_lay = QHBoxLayout(marker_wrap)
+            marker_lay.setContentsMargins(8, 0, 8, 0)
+            marker_lay.setSpacing(6)
+            ml = QLabel("Marker labels:")
+            ml.setToolTip(
+                "Waypoint name bubbles on the map: On (always in view), "
+                "Off (hover only), Auto (when few markers are in the current view)."
+            )
+            marker_lay.addWidget(ml)
+            self._marker_labels_combo = QComboBox()
+            self._marker_labels_combo.addItem("Auto", "auto")
+            self._marker_labels_combo.addItem("On", "on")
+            self._marker_labels_combo.addItem("Off", "off")
+            saved_ml = self._settings.value(_MARKER_LABELS_KEY, "auto")
+            sl = saved_ml.strip().lower() if isinstance(saved_ml, str) else ""
+            ml_mode = sl if sl in ("on", "off", "auto") else "auto"
+            ix_ml = self._marker_labels_combo.findData(ml_mode)
+            self._marker_labels_combo.blockSignals(True)
+            self._marker_labels_combo.setCurrentIndex(
+                ix_ml if ix_ml >= 0 else self._marker_labels_combo.findData("auto")
+            )
+            self._marker_labels_combo.blockSignals(False)
+            self._marker_labels_combo.currentIndexChanged.connect(
+                self._on_marker_labels_changed
+            )
+            marker_lay.addWidget(self._marker_labels_combo)
+            tb.addWidget(marker_wrap)
+
             self.addToolBar(tb)
             sb = QStatusBar(self)
             self.setStatusBar(sb)
@@ -178,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
             self._pending_map_payload: dict[str, object] | None = None
             self._parse_cache: dict[str, tuple[int, list[Waypoint], list[GeoPath]]] = {}
             self._last_map_view: tuple[float, float, int] | None = None
+            self._last_wpts: list[Waypoint] = []
+            self._last_geopaths: list[GeoPath] = []
             self._reload()
 
         def _persist_layout(self) -> None:
@@ -342,6 +377,27 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 except (TypeError, ValueError):
                     pass
+
+        def _marker_labels_from_combo(self) -> str:
+            data = self._marker_labels_combo.currentData()
+            return data if isinstance(data, str) else "auto"
+
+        def _on_marker_labels_changed(self, _index: int) -> None:
+            mode = self._marker_labels_from_combo()
+            self._settings.setValue(_MARKER_LABELS_KEY, mode)
+            self._refresh_map_marker_labels()
+
+        def _refresh_map_marker_labels(self) -> None:
+            if not self._map_shell_ready:
+                return
+            payload = build_map_js_payload(
+                self._last_wpts,
+                self._last_geopaths,
+                fit_padded_bounds=None,
+                map_center_and_zoom=self._last_map_view,
+                marker_labels=self._marker_labels_from_combo(),
+            )
+            self._apply_map_js_payload(payload)
 
         def _apply_map_js_payload(
             self,
@@ -778,11 +834,14 @@ def main(argv: list[str] | None = None) -> int:
             self._prune_parse_cache()
             paths = self._checked_paths()
             if not paths:
+                self._last_wpts = []
+                self._last_geopaths = []
                 payload = build_map_js_payload(
                     [],
                     [],
                     fit_padded_bounds=None,
                     map_center_and_zoom=self._last_map_view,
+                    marker_labels=self._marker_labels_from_combo(),
                 )
             else:
                 self._show_status_progress_determinate(len(paths), "Reading GPX — %p%")
@@ -802,11 +861,14 @@ def main(argv: list[str] | None = None) -> int:
                         "in the selected file(s)."
                     )
                     QMessageBox.information(self, "GPX", msg)
+                self._last_wpts = wpts
+                self._last_geopaths = geopaths
                 payload = build_map_js_payload(
                     wpts,
                     geopaths,
                     fit_padded_bounds=None,
                     map_center_and_zoom=self._last_map_view,
+                    marker_labels=self._marker_labels_from_combo(),
                 )
                 self._save_last_directory(paths[0])
 
