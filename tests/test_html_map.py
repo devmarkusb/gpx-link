@@ -41,6 +41,12 @@ def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
     assert google_maps_url(46.0, -123.0, name="B") in html
 
 
+def test_build_leaflet_html_includes_amusement_park_marker_emoji() -> None:
+    html = build_leaflet_html([])
+    assert "🎡" in html
+    assert "amusement\\s*park" in html
+
+
 def test_build_leaflet_html_has_base_layer_toggle() -> None:
     html = build_leaflet_html([])
     assert "tile.openstreetmap.org" in html
