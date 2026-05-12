@@ -317,7 +317,7 @@ class MainActivity : AppCompatActivity() {
             applyAdMobDebugTestDeviceConfiguration()
             MobileAds.initialize(this) {}
             removeAdsBilling?.start()
-            runOnUiThread { maybeShowBannerAd() }
+            maybeShowBannerAd()
         }
     }
 
