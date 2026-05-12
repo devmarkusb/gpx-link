@@ -28,7 +28,9 @@ htmlcov/
 # Local AI/editor tooling
 .claude/
 .codex/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .github/copilot-instructions.md
 
 # Generated GSD/Copilot payload
