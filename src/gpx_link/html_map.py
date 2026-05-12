@@ -243,6 +243,11 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
         [/hospital|clinic|emergency|\\burgent\\b|\\bems\\b/i, '🏥', '#dc2626'],
         [/camp|tent|\\brv\\s*park/i, '⛺', '#ca8a04'],
         [
+          /amusement\\s*park|theme\\s*park|\\bfairground\\b|\\bfunfair\\b|roller\\s*coaster|merry-go-round/i,
+          '🎡',
+          '#c026d3',
+        ],
+        [
           /lodging|hotel|motel|hostel|resort|bed|\\bb&b\\b|b\\s*&\\s*b/i,
           '🛏️',
           '#4f46e5',
