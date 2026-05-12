@@ -36,6 +36,7 @@ def test_build_leaflet_html_contains_osm_and_fit_bounds() -> None:
     assert "poiVisual" in html
     assert "gpxLinkSetUserLocation" in html
     assert "gpxLinkApplyPayload" in html
+    assert "labelMode" in html
     assert google_maps_url(45.5, -122.5, name="A") in html
     assert google_maps_url(46.0, -123.0, name="B") in html
 
@@ -93,6 +94,18 @@ def test_build_map_js_payload_track_coords() -> None:
     assert len(coords) >= 2
 
 
+def test_build_map_js_payload_marker_labels_coerced() -> None:
+    payload = build_map_js_payload([], [], marker_labels="on")
+    assert payload["markerLabels"] == "on"
+    payload2 = build_map_js_payload([], [], marker_labels="bogus")
+    assert payload2["markerLabels"] == "auto"
+
+
+def test_build_leaflet_html_embeds_marker_labels() -> None:
+    html = build_leaflet_html([], marker_labels="off")
+    assert '"markerLabels":"off"' in html.replace(" ", "")
+
+
 def test_build_map_js_payload_saved_view_without_fit() -> None:
     payload = build_map_js_payload(
         [],
@@ -102,6 +115,7 @@ def test_build_map_js_payload_saved_view_without_fit() -> None:
     )
     assert payload["fitBounds"] is None
     assert payload["initialView"] == [48.85, 2.35, 11.0]
+    assert payload["markerLabels"] == "auto"
 
 
 def test_build_leaflet_html_renders_track_polyline() -> None:

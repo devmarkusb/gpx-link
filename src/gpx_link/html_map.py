@@ -24,6 +24,17 @@ _POI_VIEW_PAD = 0.12
 _MAX_VERTICES_PER_LINE = 5000
 _EPSILON_M_TRACK = 18.0
 
+
+def _coerce_marker_label_mode(raw: object) -> str:
+    """Return ``on``, ``off``, or ``auto`` for waypoint name bubbles on the map."""
+    if not isinstance(raw, str):
+        return "auto"
+    s = raw.strip().lower()
+    if s in ("on", "off", "auto"):
+        return s
+    return "auto"
+
+
 # Default: derive fit bounds from all waypoints and paths (CLI / Android / tests).
 _USE_BOUNDS_FROM_FEATURES = object()
 
@@ -65,6 +76,7 @@ def build_map_js_payload(
     *,
     fit_padded_bounds: Bounds | None | object = _USE_BOUNDS_FROM_FEATURES,
     map_center_and_zoom: tuple[float, float, int] | None = None,
+    marker_labels: str = "auto",
 ) -> dict[str, Any]:
     """Serializable map state for ``gpxLinkApplyPayload``.
 
@@ -75,6 +87,10 @@ def build_map_js_payload(
     - a ``Bounds`` instance: use that box as ``fitBounds`` (caller pads if desired).
     - ``None``: no ``fitBounds``; use ``initialView`` if set, otherwise JS leaves
       pan/zoom unchanged (only layers update).
+
+    ``marker_labels``: ``on`` (always show name bubbles for markers in view),
+    ``off`` (hover only), or ``auto`` (bubbles when at most
+    ``_POI_AUTO_TOOLTIP_LIMIT`` markers lie in the padded viewport).
     """
     geopaths = paths or []
     markers: list[dict[str, object]] = []
@@ -135,6 +151,7 @@ def build_map_js_payload(
         "paths": line_features,
         "fitBounds": fit,
         "initialView": initial_view,
+        "markerLabels": _coerce_marker_label_mode(marker_labels),
     }
 
 
@@ -409,7 +426,17 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
           }}
         }}
         const useDom = inViewCount <= GPX_DOM_POI_LIMIT;
-        const poiTipsPermanent = inViewCount <= GPX_POI_AUTO_TOOLTIP_LIMIT;
+        const modeRaw = String(payload.markerLabels || 'auto').toLowerCase();
+        const labelMode =
+          modeRaw === 'on' || modeRaw === 'off' ? modeRaw : 'auto';
+        let poiTipsPermanent;
+        if (labelMode === 'off') {{
+          poiTipsPermanent = false;
+        }} else if (labelMode === 'on') {{
+          poiTipsPermanent = true;
+        }} else {{
+          poiTipsPermanent = inViewCount <= GPX_POI_AUTO_TOOLTIP_LIMIT;
+        }}
         if (window._gpxPoiLayerGroup) {{
           window._gpxContentGroup.removeLayer(window._gpxPoiLayerGroup);
         }}
@@ -527,6 +554,7 @@ def build_leaflet_html(
     *,
     fit_padded_bounds: Bounds | None | object = _USE_BOUNDS_FROM_FEATURES,
     map_center_and_zoom: tuple[float, float, int] | None = None,
+    marker_labels: str = "auto",
 ) -> str:
     """Standalone HTML with Leaflet OSM, waypoint markers, and track/route paths."""
     payload = build_map_js_payload(
@@ -534,6 +562,7 @@ def build_leaflet_html(
         paths,
         fit_padded_bounds=fit_padded_bounds,
         map_center_and_zoom=map_center_and_zoom,
+        marker_labels=marker_labels,
     )
     return _leaflet_html_document(
         auto_apply_payload_literal=_json_for_script(payload),

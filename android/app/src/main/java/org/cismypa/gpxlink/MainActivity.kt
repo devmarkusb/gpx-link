@@ -48,6 +48,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.io.OutputStreamWriter
+import java.util.Locale
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
@@ -410,10 +411,35 @@ class MainActivity : AppCompatActivity() {
     private fun isAdFreeOwned(): Boolean =
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean(RemoveAdsBilling.PREF_KEY_AD_FREE, false)
 
+    private fun markerLabelsFromPrefs(): String {
+        val raw = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_MARKER_LABELS, null)
+        val v = raw?.trim()?.lowercase(Locale.ROOT)
+        return when (v) {
+            "on", "off", "auto" -> v
+            else -> "auto"
+        }
+    }
+
+    private fun setMarkerLabelMode(mode: String) {
+        val m =
+            when (mode.lowercase(Locale.ROOT)) {
+                "on", "off", "auto" -> mode.lowercase(Locale.ROOT)
+                else -> "auto"
+            }
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(KEY_MARKER_LABELS, m).apply()
+        reloadMap()
+    }
+
     private fun showProjectMenu() {
         PopupMenu(this, toolbar, Gravity.START).apply {
             menuInflater.inflate(R.menu.menu_project, menu)
             menu.findItem(R.id.action_remove_ads)?.isVisible = !isAdFreeOwned()
+            menu.findItem(R.id.menu_marker_labels)?.subMenu?.let { sub ->
+                val mode = markerLabelsFromPrefs()
+                sub.findItem(R.id.action_labels_auto)?.isChecked = mode == "auto"
+                sub.findItem(R.id.action_labels_on)?.isChecked = mode == "on"
+                sub.findItem(R.id.action_labels_off)?.isChecked = mode == "off"
+            }
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     R.id.action_project_new -> {
@@ -428,6 +454,18 @@ class MainActivity : AppCompatActivity() {
                         loadProjectLauncher.launch(
                             arrayOf("application/json", "application/*", "*/*"),
                         )
+                        true
+                    }
+                    R.id.action_labels_auto -> {
+                        setMarkerLabelMode("auto")
+                        true
+                    }
+                    R.id.action_labels_on -> {
+                        setMarkerLabelMode("on")
+                        true
+                    }
+                    R.id.action_labels_off -> {
+                        setMarkerLabelMode("off")
                         true
                     }
                     R.id.action_remove_ads -> {
@@ -854,7 +892,7 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val py = Python.getInstance()
                     val module = py.getModule("bridge")
-                    module.callAttr("render", pathsJson, mapViewJson).toString()
+                    module.callAttr("render", pathsJson, mapViewJson, markerLabelsFromPrefs()).toString()
                 } catch (_: Throwable) {
                     null
                 }
@@ -1026,6 +1064,7 @@ class MainActivity : AppCompatActivity() {
         const val STATE_MAP_ZOOM = "map_zoom"
         const val PREFS_NAME = "gpxlink"
         const val KEY_GPX_ITEMS = "gpx_selection_v1"
+        const val KEY_MARKER_LABELS = "marker_labels_mode"
         const val PROJECT_FORMAT = "gpx-link-project"
         const val PROJECT_VERSION = 1
     }

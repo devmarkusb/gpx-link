@@ -27,13 +27,20 @@ def _parse_map_view_tuple(map_view_json: str) -> tuple[float, float, int] | None
         return None
 
 
-def render(paths_json: str, map_view_json: str = "null") -> str:
+def render(
+    paths_json: str,
+    map_view_json: str = "null",
+    marker_labels: str = "auto",
+) -> str:
     """Build Leaflet HTML for absolute filesystem paths (JSON string array).
 
     ``map_view_json``: JSON ``null`` or ``[lat, lng, zoom]`` from the WebView.
     When a valid triple is passed, the map keeps that pan/zoom (layers only
     update). When ``null``, visible GPX is fitted the first time like a fresh
     load.
+
+    ``marker_labels``: ``on``, ``off``, or ``auto`` — visibility of name bubbles
+    on waypoint markers (see ``gpx_link.html_map``).
 
     Returns a JSON object string:
     - ``{"ok": true, "html": "...", "warn_empty": bool}``
@@ -55,9 +62,10 @@ def render(paths_json: str, map_view_json: str = "null") -> str:
                 [],
                 fit_padded_bounds=None,
                 map_center_and_zoom=map_center_and_zoom,
+                marker_labels=marker_labels,
             )
         else:
-            html = build_leaflet_html([])
+            html = build_leaflet_html([], marker_labels=marker_labels)
         return json.dumps({"ok": True, "html": html, "warn_empty": False})
 
     try:
@@ -72,9 +80,10 @@ def render(paths_json: str, map_view_json: str = "null") -> str:
             geo_paths,
             fit_padded_bounds=None,
             map_center_and_zoom=map_center_and_zoom,
+            marker_labels=marker_labels,
         )
     else:
-        html = build_leaflet_html(waypoints, geo_paths)
+        html = build_leaflet_html(waypoints, geo_paths, marker_labels=marker_labels)
     return json.dumps({"ok": True, "html": html, "warn_empty": warn_empty})
 
 
