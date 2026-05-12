@@ -1,0 +1,12 @@
+---
+description: gpx-link — point agents to AGENTS.md and hard constraints
+alwaysApply: true
+---
+
+# gpx-link (Cursor)
+
+Follow the repo root **`AGENTS.md`** for build, test, lint, architecture, security, and “do not edit” paths. It is the single canonical instruction file.
+
+**Non-negotiables (summary):** do not edit **`uv.lock`**, the synced tree **`android/app/src/main/python/gpx_link/`** (change **`src/gpx_link`**), keystores / **`android/keystore.properties`**, or release workflows unless the user explicitly requests that class of change.
+
+Keep Cursor rules thin; expand policy in **`AGENTS.md`** only.
