@@ -38,6 +38,7 @@ def main(argv: list[str] | None = None) -> int:
             QMessageBox,
             QProgressBar,
             QPushButton,
+            QSizePolicy,
             QSplitter,
             QStatusBar,
             QToolBar,
@@ -130,14 +131,13 @@ def main(argv: list[str] | None = None) -> int:
             menu_btn.setMenu(project_menu)
             tb.addWidget(menu_btn)
             tb.addAction("Open GPX…", self._open_files)
-            fit_act = QAction("Fit to route", self)
-            fit_act.setShortcut(QKeySequence("Ctrl+Shift+F"))
-            fit_act.setToolTip(
-                "Zoom the map to show all data in the current selection "
-                "(shortcut: Ctrl+Shift+F)"
+            tb.addSeparator()
+            tb_spacer = QWidget()
+            tb_spacer.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored
             )
-            fit_act.triggered.connect(self._fit_map_to_visible_route)
-            tb.addAction(fit_act)
+            tb.addWidget(tb_spacer)
+
             self._action_file_panel = QAction("GPX file list", self)
             self._action_file_panel.setCheckable(True)
             self._action_file_panel.setShortcut(QKeySequence("Ctrl+Shift+L"))
@@ -159,6 +159,15 @@ def main(argv: list[str] | None = None) -> int:
             self._action_file_panel.setChecked(show_panel)
             self._action_file_panel.toggled.connect(self._on_file_panel_toggled)
             tb.addAction(self._action_file_panel)
+
+            fit_act = QAction("Fit to route", self)
+            fit_act.setShortcut(QKeySequence("Ctrl+Shift+F"))
+            fit_act.setToolTip(
+                "Zoom the map to the current selection (tracks, routes, and "
+                "waypoints). Shortcut: Ctrl+Shift+F"
+            )
+            fit_act.triggered.connect(self._fit_map_to_visible_route)
+            tb.addAction(fit_act)
 
             marker_wrap = QWidget()
             marker_lay = QHBoxLayout(marker_wrap)
