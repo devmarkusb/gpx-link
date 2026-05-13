@@ -60,4 +60,4 @@ skip = ".venv,uv.lock,android/Gemfile.lock"
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-build_command = "uv build"
+build_command = "uv lock --upgrade-package gpx-link && uv build"
