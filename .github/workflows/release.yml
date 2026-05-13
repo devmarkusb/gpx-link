@@ -76,16 +76,17 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: version
-    # TEMP: PyPI account unavailable — drop `false &&` to re-enable publish
-    if: ${{ false && needs.version.outputs.released == 'true' }}
+    if: needs.version.outputs.released == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       contents: read
       id-token: write
     steps:
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.release_tag }}
 
       - name: Setup Python
         uses: actions/setup-python@v6
