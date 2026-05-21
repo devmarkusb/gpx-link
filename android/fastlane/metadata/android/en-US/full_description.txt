@@ -1,17 +1,19 @@
-Maps GPX is a lightweight viewer for GPX files on Android. Open tracks and waypoints from storage or cloud providers, see them on an OpenStreetMap-style map (Leaflet), and tap markers to jump into Google Maps when you want turn-by-turn or richer POI context.
+Maps GPX gives you direct links from GPX POIs into Google Maps details. Lightweight viewer for GPX files, tracks with POIs.
 
 <b>What you can do</b>
-• Open one or many GPX files and combine what is checked in the list
-• Pan and zoom a map that fits your data with padding
-• See tracks and routes as paths (polylines); short segments read at a glance as small markers
-• Toggle the file list panel when you want more map space
-• Tap waypoint markers to open Google Maps (named waypoints use a search-style link centered on coordinates)
+• Open one or many GPX files and selectively view them on a map
+• Tap waypoint markers to open Google Maps with all the familiar richness of details
+• Short title information is shown marker labels
 
 <b>Who it is for</b>
-Campers, hikers, cyclists, runners, and anyone who already has GPX exports and wants a fast map-first view on their phone—without turning it into a social platform or account-based service.
+Campers, hikers, cyclists, runners, road-trip planners and anyone who already has GPX exports and wants a fast map-first view on their phone.
+
+<b>Recommendation</b>
+Use in combination with GPX POI Enricher https://play.google.com/store/apps/details?id=org.cismypa.gpxpoienricher&hl=en-US
+to automatically find interesting POIs along a route and save them along the track as GPX - to be opened here again.
 
 <b>Privacy</b>
-The app loads map tiles and scripts over the network (OpenStreetMap / CDNs) when you view the map. It may show third-party banner ads; you can remove ads permanently with a one-time in-app purchase from the project menu. It does not require a Maps GPX account. See the project documentation for details on data handling you publish alongside the store listing.
+The app loads map tiles and scripts over the network (OpenStreetMap / CDNs) when you view the map. It may show third-party ads; you can remove ads permanently with a one-time in-app purchase from the project menu. No account required.
 
 <b>Open source</b>
-Built from the same GPX rendering core as the gpx-link project on GitHub—handy if you use the desktop or CLI tools too.
+Built from the same GPX rendering core as the gpx-link project on GitHub — handy if you use the desktop or CLI tools too.
