@@ -63,9 +63,14 @@ def render(
                 fit_padded_bounds=None,
                 map_center_and_zoom=map_center_and_zoom,
                 marker_labels=marker_labels,
+                persist_viewport=True,
             )
         else:
-            html = build_leaflet_html([], marker_labels=marker_labels)
+            html = build_leaflet_html(
+                [],
+                marker_labels=marker_labels,
+                persist_viewport=True,
+            )
         return json.dumps({"ok": True, "html": html, "warn_empty": False})
 
     try:
@@ -81,9 +86,15 @@ def render(
             fit_padded_bounds=None,
             map_center_and_zoom=map_center_and_zoom,
             marker_labels=marker_labels,
+            persist_viewport=True,
         )
     else:
-        html = build_leaflet_html(waypoints, geo_paths, marker_labels=marker_labels)
+        html = build_leaflet_html(
+            waypoints,
+            geo_paths,
+            marker_labels=marker_labels,
+            persist_viewport=True,
+        )
     return json.dumps({"ok": True, "html": html, "warn_empty": warn_empty})
 
 

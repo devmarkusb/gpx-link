@@ -155,7 +155,11 @@ def build_map_js_payload(
     }
 
 
-def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
+def _leaflet_html_document(
+    *,
+    auto_apply_payload_literal: str | None,
+    persist_viewport: bool,
+) -> str:
     """Leaflet shell with ``gpxLinkApplyPayload``; optional initial payload literal."""
     tail = (
         f"\n    gpxLinkApplyPayload({auto_apply_payload_literal});\n"
@@ -167,6 +171,7 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
     )
     boot_lat_js = json.dumps(boot_lat)
     boot_lon_js = json.dumps(boot_lon)
+    persist_viewport_js = "true" if persist_viewport else "false"
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -391,6 +396,8 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
     const GPX_DOM_POI_LIMIT = {_DOM_POI_MARKER_LIMIT};
     const GPX_POI_AUTO_TOOLTIP_LIMIT = {_POI_AUTO_TOOLTIP_LIMIT};
     const GPX_POI_VIEW_PAD = {_POI_VIEW_PAD};
+    const GPX_PERSIST_VIEWPORT = {persist_viewport_js};
+    const GPX_VIEWPORT_TITLE_PREFIX = 'gpx-link-map-view:';
     function gpxDebounce(fn, waitMs) {{
       let tid = null;
       return function () {{
@@ -401,6 +408,27 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
           fn.apply(self, args);
         }}, waitMs);
       }};
+    }}
+    function gpxLinkCurrentMapView() {{
+      const c = map.getCenter();
+      return [c.lat, c.lng, map.getZoom()];
+    }}
+    window.gpxLinkCurrentMapView = gpxLinkCurrentMapView;
+    function gpxLinkPublishViewport() {{
+      if (!GPX_PERSIST_VIEWPORT) {{
+        return;
+      }}
+      try {{
+        document.title =
+          GPX_VIEWPORT_TITLE_PREFIX + JSON.stringify(gpxLinkCurrentMapView());
+      }} catch (e) {{
+        // Native hosts also capture the viewport after explicit map operations.
+      }}
+    }}
+    const gpxLinkPublishViewportDebounced =
+      gpxDebounce(gpxLinkPublishViewport, 80);
+    if (GPX_PERSIST_VIEWPORT) {{
+      map.on('moveend zoomend', gpxLinkPublishViewportDebounced);
     }}
 
     window.gpxLinkApplyPayload = function (payload) {{
@@ -522,6 +550,7 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
         map.setView([initialView[0], initialView[1]], initialView[2]);
       }}
       refreshGpxPoiMarkers();
+      gpxLinkPublishViewport();
     }};
 
     let userLocMarker = null;
@@ -541,6 +570,7 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
       userLocMarker.bindTooltip(tip, {{ sticky: false }});
       const z = Math.max(map.getZoom(), 15);
       map.setView([lat, lng], z);
+      gpxLinkPublishViewport();
     }};
 {tail}  </script>
 </body>
@@ -548,9 +578,12 @@ def _leaflet_html_document(*, auto_apply_payload_literal: str | None) -> str:
 """
 
 
-def build_leaflet_map_shell_html() -> str:
+def build_leaflet_map_shell_html(*, persist_viewport: bool = False) -> str:
     """WebEngine shell: load Leaflet once; apply updates via ``gpxLinkApplyPayload``."""
-    return _leaflet_html_document(auto_apply_payload_literal=None)
+    return _leaflet_html_document(
+        auto_apply_payload_literal=None,
+        persist_viewport=persist_viewport,
+    )
 
 
 def build_leaflet_html(
@@ -560,6 +593,7 @@ def build_leaflet_html(
     fit_padded_bounds: Bounds | None | object = _USE_BOUNDS_FROM_FEATURES,
     map_center_and_zoom: tuple[float, float, int] | None = None,
     marker_labels: str = "auto",
+    persist_viewport: bool = False,
 ) -> str:
     """Standalone HTML with Leaflet OSM, waypoint markers, and track/route paths."""
     payload = build_map_js_payload(
@@ -571,6 +605,7 @@ def build_leaflet_html(
     )
     return _leaflet_html_document(
         auto_apply_payload_literal=_json_for_script(payload),
+        persist_viewport=persist_viewport,
     )
 
 

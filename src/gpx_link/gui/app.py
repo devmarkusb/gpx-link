@@ -62,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     _SPLITTER_STATE_KEY = "main_splitter_state"
     _GPX_FILE_LIST_KEY = "gpx_file_list_v1"
     _MARKER_LABELS_KEY = "marker_labels_mode"
+    _MAP_VIEW_KEY = "last_map_view_v1"
+    _MAP_VIEW_TITLE_PREFIX = "gpx-link-map-view:"
     _PROJECT_FORMAT = "gpx-link-project"
     _PROJECT_VERSION = 1
     _PROJECT_FILTER = "GPX Link project (*.gpxlink.json);;All files (*)"
@@ -118,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
             layout.addWidget(self._splitter)
             self.setCentralWidget(central)
             self._web.page().newWindowRequested.connect(self._on_new_window_requested)
+            self._web.titleChanged.connect(self._on_web_title_changed)
 
             tb = QToolBar()
             project_menu = QMenu(self)
@@ -219,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
             self._awaiting_shell_load = False
             self._pending_map_payload: dict[str, object] | None = None
             self._parse_cache: dict[str, tuple[int, list[Waypoint], list[GeoPath]]] = {}
-            self._last_map_view: tuple[float, float, int] | None = None
+            self._last_map_view = self._restore_map_view_from_settings()
             self._last_wpts: list[Waypoint] = []
             self._last_geopaths: list[GeoPath] = []
             self._reload()
@@ -229,6 +232,52 @@ def main(argv: list[str] | None = None) -> int:
             if self._file_panel.isVisible():
                 self._settings.setValue(_SPLITTER_STATE_KEY, self._splitter.saveState())
             self._persist_gpx_file_list()
+            self._persist_map_view()
+
+        def _coerce_map_view(
+            self,
+            raw: object,
+        ) -> tuple[float, float, int] | None:
+            data = raw
+            if isinstance(raw, str):
+                s = raw.strip()
+                if not s:
+                    return None
+                try:
+                    data = json.loads(s)
+                except json.JSONDecodeError:
+                    return None
+            if not isinstance(data, (list, tuple)) or len(data) < 3:
+                return None
+            try:
+                return (
+                    float(data[0]),
+                    float(data[1]),
+                    int(round(float(data[2]))),
+                )
+            except (TypeError, ValueError):
+                return None
+
+        def _restore_map_view_from_settings(self) -> tuple[float, float, int] | None:
+            return self._coerce_map_view(self._settings.value(_MAP_VIEW_KEY, ""))
+
+        def _persist_map_view(self) -> None:
+            if self._last_map_view is None:
+                self._settings.remove(_MAP_VIEW_KEY)
+                return
+            self._settings.setValue(
+                _MAP_VIEW_KEY,
+                json.dumps(list(self._last_map_view), separators=(",", ":")),
+            )
+
+        def _set_map_view(self, value: tuple[float, float, int] | None) -> None:
+            self._last_map_view = value
+            self._persist_map_view()
+
+        def _on_web_title_changed(self, title: str) -> None:
+            if not title.startswith(_MAP_VIEW_TITLE_PREFIX):
+                return
+            self._store_map_view(title[len(_MAP_VIEW_TITLE_PREFIX) :])
 
         def _persist_gpx_file_list(self) -> None:
             entries: list[dict[str, object]] = []
@@ -320,6 +369,7 @@ def main(argv: list[str] | None = None) -> int:
 
         def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
             self._persist_layout()
+            self._settings.sync()
             super().closeEvent(event)
 
         def _saved_open_directory(self) -> str:
@@ -377,15 +427,9 @@ def main(argv: list[str] | None = None) -> int:
                 app.processEvents()
 
         def _store_map_view(self, result: object) -> None:
-            if isinstance(result, list) and len(result) >= 3:
-                try:
-                    self._last_map_view = (
-                        float(result[0]),
-                        float(result[1]),
-                        int(round(float(result[2]))),
-                    )
-                except (TypeError, ValueError):
-                    pass
+            view = self._coerce_map_view(result)
+            if view is not None:
+                self._set_map_view(view)
 
         def _marker_labels_from_combo(self) -> str:
             data = self._marker_labels_combo.currentData()
@@ -565,7 +609,7 @@ def main(argv: list[str] | None = None) -> int:
             finally:
                 self._file_list.blockSignals(False)
             self._parse_cache.clear()
-            self._last_map_view = None
+            self._set_map_view(None)
             self._persist_gpx_file_list()
 
         def _new_project(self) -> None:
@@ -759,17 +803,7 @@ def main(argv: list[str] | None = None) -> int:
                     self._splitter.restoreState(restored)
 
             mv = data.get("map_view")
-            if isinstance(mv, list) and len(mv) >= 3:
-                try:
-                    self._last_map_view = (
-                        float(mv[0]),
-                        float(mv[1]),
-                        int(round(float(mv[2]))),
-                    )
-                except (TypeError, ValueError):
-                    self._last_map_view = None
-            else:
-                self._last_map_view = None
+            self._set_map_view(self._coerce_map_view(mv))
 
             self._save_last_directory(src)
             self._reload()
@@ -872,13 +906,20 @@ def main(argv: list[str] | None = None) -> int:
                     QMessageBox.information(self, "GPX", msg)
                 self._last_wpts = wpts
                 self._last_geopaths = geopaths
-                payload = build_map_js_payload(
-                    wpts,
-                    geopaths,
-                    fit_padded_bounds=None,
-                    map_center_and_zoom=self._last_map_view,
-                    marker_labels=self._marker_labels_from_combo(),
-                )
+                if self._last_map_view is None:
+                    payload = build_map_js_payload(
+                        wpts,
+                        geopaths,
+                        marker_labels=self._marker_labels_from_combo(),
+                    )
+                else:
+                    payload = build_map_js_payload(
+                        wpts,
+                        geopaths,
+                        fit_padded_bounds=None,
+                        map_center_and_zoom=self._last_map_view,
+                        marker_labels=self._marker_labels_from_combo(),
+                    )
                 self._save_last_directory(paths[0])
 
             if not self._map_shell_ready:
@@ -888,7 +929,7 @@ def main(argv: list[str] | None = None) -> int:
                     self._awaiting_shell_load = True
                     self._web.loadFinished.connect(self._on_map_shell_load_finished)
                     self._web.setHtml(
-                        build_leaflet_map_shell_html(),
+                        build_leaflet_map_shell_html(persist_viewport=True),
                         QUrl("https://cdn.jsdelivr.net/"),
                     )
                 return
