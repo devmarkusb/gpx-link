@@ -84,14 +84,16 @@ def gen_feature_1024_500() -> Image.Image:
     draw = ImageDraw.Draw(img)
     title_font = try_font(56)
     sub_font = try_font(22)
-    draw.text((48, 140), "Maps GPX", font=title_font, fill=WHITE)
+    # Google Play may crop feature graphics horizontally in some listing cards.
+    # Keep important content away from the outer crop bands on each side.
+    draw.text((128, 140), "Maps GPX", font=title_font, fill=WHITE)
     draw.text(
-        (48, 228),
+        (128, 228),
         "GPX on OpenStreetMap  ·  Open in Google Maps",
         font=sub_font,
         fill=(0xD4, 0xDE, 0xEA),
     )
-    draw_pin(draw, 860, 230, scale=9.5, fill=BLUE, outline=(0x1D, 0x4E, 0xD8))
+    draw_pin(draw, 760, 230, scale=9.5, fill=BLUE, outline=(0x1D, 0x4E, 0xD8))
     return img
 
 
