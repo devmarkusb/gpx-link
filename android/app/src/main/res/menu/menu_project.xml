@@ -11,23 +11,7 @@
         android:title="@string/project_load" />
     <item
         android:id="@+id/menu_marker_labels"
-        android:title="@string/marker_labels">
-        <menu>
-            <group
-                android:id="@+id/group_marker_labels"
-                android:checkableBehavior="single">
-                <item
-                    android:id="@+id/action_labels_auto"
-                    android:title="@string/marker_labels_auto" />
-                <item
-                    android:id="@+id/action_labels_on"
-                    android:title="@string/marker_labels_on" />
-                <item
-                    android:id="@+id/action_labels_off"
-                    android:title="@string/marker_labels_off" />
-            </group>
-        </menu>
-    </item>
+        android:title="@string/marker_labels" />
     <item
         android:id="@+id/action_remove_ads"
         android:title="@string/remove_ads" />

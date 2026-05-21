@@ -84,6 +84,20 @@ def test_build_leaflet_map_shell_has_apply_but_no_initial_coords() -> None:
     html = build_leaflet_map_shell_html()
     assert "gpxLinkApplyPayload" in html
     assert "45.51" not in html
+    assert "const GPX_PERSIST_VIEWPORT = false;" in html
+
+
+def test_leaflet_html_viewport_persistence_is_opt_in() -> None:
+    html = build_leaflet_html([], persist_viewport=True)
+    assert "const GPX_PERSIST_VIEWPORT = true;" in html
+    assert "gpx-link-map-view:" in html
+    assert "gpxLinkCurrentMapView" in html
+
+
+def test_leaflet_map_shell_can_publish_viewport_changes() -> None:
+    html = build_leaflet_map_shell_html(persist_viewport=True)
+    assert "const GPX_PERSIST_VIEWPORT = true;" in html
+    assert "document.title =" in html
 
 
 def test_build_map_js_payload_track_coords() -> None:

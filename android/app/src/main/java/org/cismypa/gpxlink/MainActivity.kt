@@ -219,15 +219,19 @@ class MainActivity : AppCompatActivity() {
         fileList = findViewById(R.id.file_list)
         setFilePanelVisible(panelVisible)
 
-        savedInstanceState?.let { b ->
+        val restoredMapView = savedInstanceState?.let { b ->
             if (b.containsKey(STATE_MAP_LAT) && b.containsKey(STATE_MAP_LON) && b.containsKey(STATE_MAP_ZOOM)) {
-                lastMapView =
-                    Triple(
-                        b.getDouble(STATE_MAP_LAT),
-                        b.getDouble(STATE_MAP_LON),
-                        b.getInt(STATE_MAP_ZOOM),
-                    )
+                Triple(
+                    b.getDouble(STATE_MAP_LAT),
+                    b.getDouble(STATE_MAP_LON),
+                    b.getInt(STATE_MAP_ZOOM),
+                )
+            } else {
+                null
             }
+        } ?: loadPersistedMapView()
+        if (restoredMapView != null) {
+            lastMapView = restoredMapView
         }
 
         toolbar.setOnMenuItemClickListener { item ->
@@ -298,6 +302,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        (webView.tag as? MapWebState)?.ticket?.let { captureMapViewIfCurrent(webView, it) }
         mapBannerAdView?.pause()
         super.onPause()
     }
@@ -426,19 +431,61 @@ class MainActivity : AppCompatActivity() {
                 "on", "off", "auto" -> mode.lowercase(Locale.ROOT)
                 else -> "auto"
             }
+        if (m == markerLabelsFromPrefs()) return
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(KEY_MARKER_LABELS, m).apply()
         reloadMap()
+    }
+
+    private fun markerLabelModeTitleRes(mode: String): Int =
+        when (mode) {
+            "on" -> R.string.marker_labels_on
+            "off" -> R.string.marker_labels_off
+            else -> R.string.marker_labels_auto
+        }
+
+    private fun markerLabelModeIndex(mode: String): Int =
+        when (mode) {
+            "on" -> 1
+            "off" -> 2
+            else -> 0
+        }
+
+    private fun markerLabelModeAt(index: Int): String =
+        when (index) {
+            1 -> "on"
+            2 -> "off"
+            else -> "auto"
+        }
+
+    private fun showMarkerLabelModeDialog() {
+        val mode = markerLabelsFromPrefs()
+        val labels: Array<CharSequence> =
+            arrayOf(
+                getString(R.string.marker_labels_auto),
+                getString(R.string.marker_labels_on),
+                getString(R.string.marker_labels_off),
+            )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.marker_labels)
+            .setSingleChoiceItems(labels, markerLabelModeIndex(mode)) { dialog, which ->
+                setMarkerLabelMode(markerLabelModeAt(which))
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun showProjectMenu() {
         PopupMenu(this, toolbar, Gravity.START).apply {
             menuInflater.inflate(R.menu.menu_project, menu)
             menu.findItem(R.id.action_remove_ads)?.isVisible = !isAdFreeOwned()
-            menu.findItem(R.id.menu_marker_labels)?.subMenu?.let { sub ->
+            menu.findItem(R.id.menu_marker_labels)?.let { item ->
                 val mode = markerLabelsFromPrefs()
-                sub.findItem(R.id.action_labels_auto)?.isChecked = mode == "auto"
-                sub.findItem(R.id.action_labels_on)?.isChecked = mode == "on"
-                sub.findItem(R.id.action_labels_off)?.isChecked = mode == "off"
+                item.title =
+                    getString(
+                        R.string.marker_labels_current,
+                        getString(markerLabelModeTitleRes(mode)),
+                    )
             }
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
@@ -456,16 +503,8 @@ class MainActivity : AppCompatActivity() {
                         )
                         true
                     }
-                    R.id.action_labels_auto -> {
-                        setMarkerLabelMode("auto")
-                        true
-                    }
-                    R.id.action_labels_on -> {
-                        setMarkerLabelMode("on")
-                        true
-                    }
-                    R.id.action_labels_off -> {
-                        setMarkerLabelMode("off")
+                    R.id.menu_marker_labels -> {
+                        showMarkerLabelModeDialog()
                         true
                     }
                     R.id.action_remove_ads -> {
@@ -485,7 +524,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun promptNewProject() {
         if (gpxItems.isEmpty()) {
-            lastMapView = null
+            setLastMapView(null)
             reloadMap()
             return
         }
@@ -498,7 +537,7 @@ class MainActivity : AppCompatActivity() {
                 gpxItems.clear()
                 adapter.notifyDataSetChanged()
                 persistGpxSelection()
-                lastMapView = null
+                setLastMapView(null)
                 reloadMap()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -521,7 +560,11 @@ class MainActivity : AppCompatActivity() {
                 put("format", PROJECT_FORMAT)
                 put("version", PROJECT_VERSION)
                 put("show_file_panel", filePanel.visibility == View.VISIBLE)
-                put("map_view", JSONObject.NULL)
+                put(
+                    "map_view",
+                    lastMapView?.let { JSONArray(listOf(it.first, it.second, it.third)) }
+                        ?: JSONObject.NULL,
+                )
                 put("splitter_state_b64", JSONObject.NULL)
                 put("files", files)
             }
@@ -552,7 +595,7 @@ class MainActivity : AppCompatActivity() {
         val showPanel = root.optBoolean("show_file_panel", true)
         setFilePanelVisible(showPanel)
         persistGpxSelection()
-        lastMapView = null
+        setLastMapView(root.optJSONArray("map_view")?.let { parseJsMapView(it.toString()) })
         reloadMap()
         if (skipped > 0) {
             Toast.makeText(this, R.string.project_missing_paths, Toast.LENGTH_LONG).show()
@@ -684,7 +727,7 @@ class MainActivity : AppCompatActivity() {
         refreshGlobalBusyProgress()
         val preserved = state.preservedPanZoom
         if (preserved != null) {
-            lastMapView = preserved
+            setLastMapView(preserved)
         } else {
             captureMapViewIfCurrent(webViewFinished, state.ticket)
         }
@@ -698,7 +741,7 @@ class MainActivity : AppCompatActivity() {
                     "var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
             ) { raw ->
                 if ((wv.tag as? MapWebState)?.ticket != ticket) return@evaluateJavascript
-                parseJsMapView(raw)?.let { lastMapView = it }
+                parseJsMapView(raw)?.let { setLastMapView(it) }
             }
         }
     }
@@ -771,7 +814,7 @@ class MainActivity : AppCompatActivity() {
             "(function(){try{map.fitBounds($lit,{animate:false});var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
         ) { raw ->
             if ((webView.tag as? MapWebState)?.ticket != ticket) return@evaluateJavascript
-            parseJsMapView(raw)?.let { lastMapView = it }
+            parseJsMapView(raw)?.let { setLastMapView(it) }
         }
     }
 
@@ -782,6 +825,13 @@ class MainActivity : AppCompatActivity() {
         wv.settings.setSupportMultipleWindows(true)
         wv.settings.javaScriptCanOpenWindowsAutomatically = true
         wv.webChromeClient = object : WebChromeClient() {
+            override fun onReceivedTitle(view: WebView?, title: String?) {
+                super.onReceivedTitle(view, title)
+                if (view === wv) {
+                    onMapWebTitle(title)
+                }
+            }
+
             override fun onCreateWindow(
                 view: WebView?,
                 isDialog: Boolean,
@@ -832,6 +882,30 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(KEY_GPX_ITEMS, arr.toString()).apply()
     }
 
+    private fun setLastMapView(view: Triple<Double, Double, Int>?) {
+        lastMapView = view
+        val edit = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+        if (view == null) {
+            edit.remove(KEY_MAP_VIEW)
+        } else {
+            edit.putString(
+                KEY_MAP_VIEW,
+                JSONArray(listOf(view.first, view.second, view.third)).toString(),
+            )
+        }
+        edit.apply()
+    }
+
+    private fun loadPersistedMapView(): Triple<Double, Double, Int>? {
+        val raw = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_MAP_VIEW, null)
+        return parseJsMapView(raw)
+    }
+
+    private fun onMapWebTitle(title: String?) {
+        if (title == null || !title.startsWith(MAP_VIEW_TITLE_PREFIX)) return
+        parseJsMapView(title.removePrefix(MAP_VIEW_TITLE_PREFIX))?.let { setLastMapView(it) }
+    }
+
     private fun loadPersistedGpxSelection() {
         val raw = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_GPX_ITEMS, null)
             ?: return
@@ -873,7 +947,7 @@ class MainActivity : AppCompatActivity() {
             if (rq != renderRequestGeneration) return@evaluateJavascript
             val currentMapView = parseJsMapView(raw)
             if (currentMapView != null) {
-                lastMapView = currentMapView
+                setLastMapView(currentMapView)
             }
             renderMapForCurrentSelection(rq, currentMapView ?: lastMapView)
         }
@@ -1065,6 +1139,8 @@ class MainActivity : AppCompatActivity() {
         const val PREFS_NAME = "gpxlink"
         const val KEY_GPX_ITEMS = "gpx_selection_v1"
         const val KEY_MARKER_LABELS = "marker_labels_mode"
+        const val KEY_MAP_VIEW = "last_map_view_v1"
+        const val MAP_VIEW_TITLE_PREFIX = "gpx-link-map-view:"
         const val PROJECT_FORMAT = "gpx-link-project"
         const val PROJECT_VERSION = 1
     }

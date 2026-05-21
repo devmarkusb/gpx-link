@@ -36,6 +36,7 @@
     <string name="remove_ads_thanks">Thank you — ads are now removed.</string>
     <string name="restore_purchases_done">Purchase state refreshed.</string>
     <string name="marker_labels">Marker labels</string>
+    <string name="marker_labels_current">Marker labels: %1$s</string>
     <string name="marker_labels_auto">Auto (few in view)</string>
     <string name="marker_labels_on">On</string>
     <string name="marker_labels_off">Off</string>
