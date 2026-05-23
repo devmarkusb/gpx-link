@@ -42,6 +42,9 @@ val admobAppIdRelease = envOrProperty("ADMOB_APPLICATION_ID", "gpxlink.admobAppI
 val admobBannerUnitRelease =
     envOrProperty("ADMOB_BANNER_UNIT_ID", "gpxlink.admobBannerUnitId")
         ?: "ca-app-pub-3940256099942544/6300978111"
+val admobInterstitialUnitRelease =
+    envOrProperty("ADMOB_INTERSTITIAL_UNIT_ID", "gpxlink.admobInterstitialUnitId")
+        ?: "ca-app-pub-3940256099942544/1033173712"
 val removeAdsProductId =
     envOrProperty("PLAY_REMOVE_ADS_PRODUCT_ID", "gpxlink.removeAdsProductId") ?: "remove_ads"
 
@@ -63,6 +66,7 @@ android {
         buildConfigField("String", "REMOVE_ADS_PRODUCT_ID", "\"$removeAdsProductId\"")
         buildConfigField("String", "DEBUG_ADMOB_TEST_DEVICE_IDS", "\"\"")
         resValue("string", "admob_banner_unit_id", "ca-app-pub-3940256099942544/6300978111")
+        resValue("string", "admob_interstitial_unit_id", "ca-app-pub-3940256099942544/1033173712")
         // Chaquopy Python 3.12 ships native libs only for arm64-v8a and x86_64.
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
@@ -99,6 +103,7 @@ android {
             )
             manifestPlaceholders["admobAppId"] = admobAppIdRelease
             resValue("string", "admob_banner_unit_id", admobBannerUnitRelease)
+            resValue("string", "admob_interstitial_unit_id", admobInterstitialUnitRelease)
             // debugSymbolLevel only affects .so built by this module (CMake/ndk-build).
             // Chaquopy ships prebuilt, stripped native libs — AGP emits no native-debug
             // metadata (mergeReleaseNativeDebugMetadata NO-SOURCE), so Play may still

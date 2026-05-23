@@ -33,16 +33,20 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.core.view.isVisible
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import com.google.android.gms.ads.AdError
+import com.google.android.gms.ads.AdListener
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.FullScreenContentCallback
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import com.google.android.gms.ads.AdRequest
-import com.google.android.gms.ads.AdSize
-import com.google.android.gms.ads.AdView
-import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.AdListener
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -71,6 +75,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adBannerContainer: FrameLayout
     private var removeAdsBilling: RemoveAdsBilling? = null
     private var mapBannerAdView: AdView? = null
+    private var panelTransitionInterstitialAd: InterstitialAd? = null
+    private var panelTransitionInterstitialLoading = false
+    private var panelTransitionInterstitialShowing = false
     private var lastNotifiedAdFree: Boolean? = null
     private val importExecutor = Executors.newSingleThreadExecutor()
     private val mapRenderExecutor = Executors.newSingleThreadExecutor()
@@ -250,7 +257,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 R.id.action_toggle_file_list -> {
                     val show = filePanel.visibility != View.VISIBLE
-                    setFilePanelVisible(show)
+                    requestFilePanelVisible(show)
                     true
                 }
                 else -> false
@@ -324,6 +331,7 @@ class MainActivity : AppCompatActivity() {
             MobileAds.initialize(this) {}
             removeAdsBilling?.start()
             maybeShowBannerAd()
+            maybeLoadPanelTransitionInterstitialAd()
         }
     }
 
@@ -332,6 +340,8 @@ class MainActivity : AppCompatActivity() {
         if (adFree) {
             mapBannerAdView?.destroy()
             mapBannerAdView = null
+            panelTransitionInterstitialAd = null
+            panelTransitionInterstitialLoading = false
             adBannerContainer.removeAllViews()
             adBannerContainer.visibility = View.GONE
             if (previous == false) {
@@ -340,6 +350,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             adBannerContainer.visibility = View.VISIBLE
             maybeShowBannerAd()
+            maybeLoadPanelTransitionInterstitialAd()
         }
         lastNotifiedAdFree = adFree
     }
@@ -369,6 +380,78 @@ class MainActivity : AppCompatActivity() {
         adBannerContainer.addView(adView)
         mapBannerAdView = adView
         adView.loadAd(AdRequest.Builder().build())
+    }
+
+    private fun maybeLoadPanelTransitionInterstitialAd() {
+        val billing = removeAdsBilling ?: return
+        if (billing.isAdFreeCached()) return
+        if (panelTransitionInterstitialAd != null || panelTransitionInterstitialLoading) return
+        panelTransitionInterstitialLoading = true
+        InterstitialAd.load(
+            this,
+            getString(R.string.admob_interstitial_unit_id),
+            AdRequest.Builder().build(),
+            object : InterstitialAdLoadCallback() {
+                override fun onAdLoaded(interstitialAd: InterstitialAd) {
+                    panelTransitionInterstitialLoading = false
+                    if (isFinishing || isDestroyed || removeAdsBilling?.isAdFreeCached() == true) {
+                        panelTransitionInterstitialAd = null
+                        return
+                    }
+                    panelTransitionInterstitialAd = interstitialAd
+                }
+
+                override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    panelTransitionInterstitialLoading = false
+                    panelTransitionInterstitialAd = null
+                }
+            },
+        )
+    }
+
+    private fun requestFilePanelVisible(visible: Boolean) {
+        if ((filePanel.visibility == View.VISIBLE) == visible) return
+        showPanelTransitionInterstitialThen {
+            setFilePanelVisible(visible)
+        }
+    }
+
+    private fun showPanelTransitionInterstitialThen(onFinished: () -> Unit) {
+        val billing = removeAdsBilling
+        val interstitialAd = panelTransitionInterstitialAd
+        if (
+            billing?.isAdFreeCached() == true ||
+                interstitialAd == null ||
+                panelTransitionInterstitialShowing
+        ) {
+            onFinished()
+            maybeLoadPanelTransitionInterstitialAd()
+            return
+        }
+
+        panelTransitionInterstitialAd = null
+        panelTransitionInterstitialShowing = true
+        var finished = false
+        fun finishTransition() {
+            if (finished) return
+            finished = true
+            panelTransitionInterstitialShowing = false
+            if (isFinishing || isDestroyed) return
+            onFinished()
+            maybeLoadPanelTransitionInterstitialAd()
+        }
+
+        interstitialAd.fullScreenContentCallback =
+            object : FullScreenContentCallback() {
+                override fun onAdDismissedFullScreenContent() {
+                    finishTransition()
+                }
+
+                override fun onAdFailedToShowFullScreenContent(adError: AdError) {
+                    finishTransition()
+                }
+            }
+        interstitialAd.show(this)
     }
 
     private fun promptRemoveAdsPurchase() {
@@ -662,6 +745,9 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         mapBannerAdView?.destroy()
         mapBannerAdView = null
+        panelTransitionInterstitialAd = null
+        panelTransitionInterstitialLoading = false
+        panelTransitionInterstitialShowing = false
         removeAdsBilling?.close()
         removeAdsBilling = null
         importExecutor.shutdownNow()
