@@ -63,6 +63,19 @@ Use **`python -m pip install --upgrade gpx-link`** to refresh after a new releas
 uv run pytest --cov
 ```
 
+## Dependency audit
+
+CI audits the locked Python dependency graph, including optional extras and the
+default development dependency group:
+
+```bash
+uv audit --preview-features audit --locked
+```
+
+The `--locked` flag makes stale `uv.lock` metadata a failure instead of letting
+the audit silently refresh the lockfile. If uv graduates `audit` from preview,
+drop the preview flag and use `uv audit --locked`.
+
 ## Android builds and Google Play
 
 ### Local builds

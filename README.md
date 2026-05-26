@@ -156,6 +156,7 @@ CI builds **debug** APKs on every push/PR; **release** signing and uploads are d
 
 ```bash
 uv sync
+uv audit --preview-features audit --locked
 uv run pytest
 uv run ruff check
 uv run ruff format --check
