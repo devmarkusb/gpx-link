@@ -30,8 +30,9 @@ From the repo root (after **[uv](https://docs.astral.sh/uv/)** is installed):
 | Scope | Command |
 | ----- | ------- |
 | Unit tests + coverage (matches CI) | `uv run pytest` |
+| Dependency vulnerability audit (CI) | `uv audit --preview-features audit --locked` |
 
-CI also runs the same suite on Python **3.10** and **3.13** (`.github/workflows/ci.yml`).
+CI also runs the same suite and dependency audit on Python **3.10** and **3.13** (`.github/workflows/ci.yml`).
 
 ## 4. Formatting and linting
 
@@ -87,7 +88,7 @@ Commit messages on PRs are validated with **conventional-pre-commit** (see `.pre
 ## 10. Review checklist before final response
 
 - [ ] Edits align with **`src/`** vs **`android/`** ownership rules above; no accidental edits to generated trees or lockfiles.
-- [ ] **`uv run ruff check`**, **`uv run ruff format --check`**, and **`uv run pytest`** were run (or failures explained) for Python-affecting changes.
+- [ ] **`uv run ruff check`**, **`uv run ruff format --check`**, **`uv run pytest`**, and **`uv audit --preview-features audit --locked`** were run (or failures explained) for Python-affecting changes.
 - [ ] If hooks matter for the change: **`uv run pre-commit run --all-files`** (or relevant hooks) was considered.
 - [ ] Android-only changes: consider **`./gradlew assembleDebug`** from **`android/`** (same as CI **android** job); not re-run here if not verified in-session.
 - [ ] No secrets or **production-only** config committed; no broad permission requests unless the user asked for them.
