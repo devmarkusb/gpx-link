@@ -123,6 +123,25 @@ Use **Open GPX…** to add GPX files to a sidebar list; check or uncheck files t
 
 If **`gpx-link-gui`** is missing or **`ImportError`** appears, install the **`gui`** extra (`pip install 'gpx-link[gui]'` or `uv sync --extra gui` on a checkout) and ensure **Qt WebEngine** is supported on your platform.
 
+### Desktop ads
+
+The desktop GUI can show a bottom banner ad in a separate Qt WebEngine view when
+release packaging provides an approved ad placement. Configure either a remote
+banner page or inline HTML:
+
+```bash
+GPX_LINK_DESKTOP_AD_URL="https://example.com/gpx-link/banner.html" gpx-link-gui
+
+GPX_LINK_DESKTOP_AD_HTML_FILE="/path/to/banner.html" gpx-link-gui
+```
+
+Optional desktop monetization settings:
+
+- **`GPX_LINK_DESKTOP_AD_HTML`** — inline banner HTML instead of a file.
+- **`GPX_LINK_DESKTOP_AD_HEIGHT`** — banner height in pixels, clamped to 48–160.
+- **`GPX_LINK_DESKTOP_REMOVE_ADS_URL`** — URL opened by **Remove ads…** in the project menu.
+- **`GPX_LINK_DESKTOP_AD_FREE=1`** — disables the desktop ad slot for paid or ad-free builds.
+
 ## Behavior and URLs
 
 - **Map**: OpenStreetMap tiles via Leaflet (`html_map.build_leaflet_html`).

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
 
 from gpx_link.bounds import bounds_for_map
+from gpx_link.desktop_ads import DesktopAdConfig, load_desktop_ad_config
 from gpx_link.html_map import (
     build_leaflet_map_shell_html,
     build_map_js_payload,
@@ -22,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from PySide6.QtCore import QByteArray, QSettings, Qt, QUrl
         from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
-        from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest
+        from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest, QWebEnginePage
         from PySide6.QtWebEngineWidgets import QWebEngineView
         from PySide6.QtWidgets import (
             QAbstractItemView,
@@ -67,12 +69,37 @@ def main(argv: list[str] | None = None) -> int:
     _PROJECT_FORMAT = "gpx-link-project"
     _PROJECT_VERSION = 1
     _PROJECT_FILTER = "GPX Link project (*.gpxlink.json);;All files (*)"
+    _LINK_CLICKED_NAVIGATION_TYPE = getattr(
+        QWebEnginePage.NavigationType,
+        "NavigationTypeLinkClicked",
+        getattr(QWebEnginePage, "NavigationTypeLinkClicked", None),
+    )
+
+    class ExternalLinkWebEnginePage(QWebEnginePage):
+        def acceptNavigationRequest(  # noqa: N802
+            self,
+            url: QUrl,
+            nav_type: QWebEnginePage.NavigationType,
+            is_main_frame: bool,
+        ) -> bool:
+            if (
+                is_main_frame
+                and _LINK_CLICKED_NAVIGATION_TYPE is not None
+                and nav_type == _LINK_CLICKED_NAVIGATION_TYPE
+                and url.isValid()
+                and url.scheme() in {"http", "https"}
+            ):
+                QDesktopServices.openUrl(url)
+                return False
+            return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
     class MainWindow(QMainWindow):
         def __init__(self, initial_paths: list[Path]) -> None:
             super().__init__()
             self.setWindowTitle("GPX Link")
             self._settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+            self._desktop_ad = load_desktop_ad_config(os.environ)
+            self._ad_view: QWebEngineView | None = None
             self._web = QWebEngineView()
             self._file_list = QListWidget()
             self._file_list.setMinimumWidth(220)
@@ -117,7 +144,10 @@ def main(argv: list[str] | None = None) -> int:
             central = QWidget()
             layout = QVBoxLayout(central)
             layout.setContentsMargins(0, 0, 0, 0)
-            layout.addWidget(self._splitter)
+            layout.addWidget(self._splitter, 1)
+            self._ad_view = self._build_desktop_ad_view()
+            if self._ad_view is not None:
+                layout.addWidget(self._ad_view)
             self.setCentralWidget(central)
             self._web.page().newWindowRequested.connect(self._on_new_window_requested)
             self._web.titleChanged.connect(self._on_web_title_changed)
@@ -127,6 +157,11 @@ def main(argv: list[str] | None = None) -> int:
             project_menu.addAction("New", self._new_project)
             project_menu.addAction("Save…", self._save_project)
             project_menu.addAction("Load…", self._load_project)
+            self._remove_ads_action = project_menu.addAction(
+                "Remove ads…",
+                self._open_remove_ads_url,
+            )
+            self._remove_ads_action.setVisible(self._desktop_ad is not None)
             menu_btn = QToolButton(self)
             menu_btn.setText("☰")
             menu_btn.setToolTip("New, save, or load a project")
@@ -226,6 +261,51 @@ def main(argv: list[str] | None = None) -> int:
             self._last_wpts: list[Waypoint] = []
             self._last_geopaths: list[GeoPath] = []
             self._reload()
+
+        def _build_desktop_ad_view(self) -> QWebEngineView | None:
+            cfg = self._desktop_ad
+            if cfg is None:
+                return None
+
+            ad_view = QWebEngineView(self)
+            ad_view.setPage(ExternalLinkWebEnginePage(ad_view))
+            ad_view.setFixedHeight(cfg.height)
+            ad_view.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
+            )
+            ad_view.setVisible(False)
+            ad_view.page().newWindowRequested.connect(self._on_new_window_requested)
+            ad_view.loadFinished.connect(self._on_desktop_ad_load_finished)
+            self._load_desktop_ad(ad_view, cfg)
+            return ad_view
+
+        def _load_desktop_ad(
+            self,
+            ad_view: QWebEngineView,
+            cfg: DesktopAdConfig,
+        ) -> None:
+            if cfg.source == "url":
+                ad_view.load(QUrl(cfg.content))
+            else:
+                ad_view.setHtml(cfg.content, QUrl(cfg.base_url))
+
+        def _on_desktop_ad_load_finished(self, ok: bool) -> None:
+            if self._ad_view is not None:
+                self._ad_view.setVisible(ok)
+
+        def _open_remove_ads_url(self) -> None:
+            cfg = self._desktop_ad
+            if cfg is None:
+                return
+            if cfg.remove_ads_url is None:
+                QMessageBox.information(
+                    self,
+                    "GPX Link",
+                    "No desktop ad-free purchase URL is configured for this build.",
+                )
+                return
+            QDesktopServices.openUrl(QUrl(cfg.remove_ads_url))
 
         def _persist_layout(self) -> None:
             self._settings.setValue(_SHOW_FILE_PANEL_KEY, self._file_panel.isVisible())
