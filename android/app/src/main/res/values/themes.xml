@@ -4,6 +4,7 @@
         <item name="colorPrimary">@color/md_theme_primary</item>
         <item name="colorPrimaryContainer">@color/md_theme_primary_container</item>
         <item name="colorOnPrimary">@color/md_theme_on_primary</item>
-        <item name="android:statusBarColor">@color/md_theme_primary</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>

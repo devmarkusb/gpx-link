@@ -25,9 +25,13 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.PopupMenu
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.core.view.isVisible
@@ -204,8 +208,10 @@ class MainActivity : AppCompatActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        applySystemBarInsets()
 
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(application))
@@ -312,6 +318,24 @@ class MainActivity : AppCompatActivity() {
         (webView.tag as? MapWebState)?.ticket?.let { captureMapViewIfCurrent(webView, it) }
         mapBannerAdView?.pause()
         super.onPause()
+    }
+
+    private fun applySystemBarInsets() {
+        val root = findViewById<View>(R.id.main_root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, windowInsets ->
+            val bars =
+                windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+                )
+            view.updatePadding(
+                left = bars.left,
+                top = bars.top,
+                right = bars.right,
+                bottom = bars.bottom,
+            )
+            WindowInsetsCompat.CONSUMED
+        }
+        ViewCompat.requestApplyInsets(root)
     }
 
     private fun setupAdsAndBilling() {
