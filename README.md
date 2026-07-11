@@ -1,7 +1,7 @@
 # gpx-link
 
 [![PyPI version](https://img.shields.io/pypi/v/gpx-link?label=PyPI)](https://pypi.org/project/gpx-link/)
-[![Python versions](https://img.shields.io/pypi/pyversions/gpx-link?label=Python)](https://pypi.org/project/gpx-link/)
+[![Python versions](https://img.shields.io/python/required-version-toml?tomlFilePath=https://raw.githubusercontent.com/devmarkusb/gpx-link/main/pyproject.toml&label=Python)](https://pypi.org/project/gpx-link/)
 [![CI workflow](https://img.shields.io/badge/CI-ci.yml-2088FF?logo=githubactions&logoColor=white)](https://github.com/devmarkusb/gpx-link/actions/workflows/ci.yml)
 [![Android Play workflow](https://img.shields.io/badge/Google_Play-release_workflow-3DDC84?logo=googleplay&logoColor=white)](https://github.com/devmarkusb/gpx-link/actions/workflows/android-play.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-informational)](LICENSE)
