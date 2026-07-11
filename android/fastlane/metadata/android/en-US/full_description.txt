@@ -1,5 +1,7 @@
 Maps GPX gives you direct links from GPX POIs into Google Maps details. Lightweight viewer for GPX files, tracks with POIs.
 
+Tip: Pair with GPX POI Enricher (companion app) to discover POIs along a route and save them into your GPX — then open them here again: https://play.google.com/store/apps/details?id=org.cismypa.gpxpoienricher&hl=en-US
+
 <b>What you can do</b>
 • Open one or many GPX files and selectively view them on a map
 • Tap waypoint markers to open Google Maps with all the familiar richness of details
@@ -8,9 +10,8 @@ Maps GPX gives you direct links from GPX POIs into Google Maps details. Lightwei
 <b>Who it is for</b>
 Campers, hikers, cyclists, runners, road-trip planners and anyone who already has GPX exports and wants a fast map-first view on their phone.
 
-<b>Recommendation</b>
-Use in combination with GPX POI Enricher https://play.google.com/store/apps/details?id=org.cismypa.gpxpoienricher&hl=en-US
-to automatically find interesting POIs along a route and save them along the track as GPX - to be opened here again.
+<b>Works with GPX POI Enricher</b>
+Automatically find interesting POIs along a route and save them along the track as GPX — ready to open here in Maps GPX.
 
 <b>Privacy</b>
 The app loads map tiles and scripts over the network (OpenStreetMap / CDNs) when you view the map. It may show third-party ads; you can remove ads permanently with a one-time in-app purchase from the project menu. No account required.
