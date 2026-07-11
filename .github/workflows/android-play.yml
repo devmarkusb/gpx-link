@@ -150,6 +150,7 @@ jobs:
         env:
           ADMOB_APPLICATION_ID: ${{ secrets.ADMOB_APPLICATION_ID }}
           ADMOB_BANNER_UNIT_ID: ${{ secrets.ADMOB_BANNER_UNIT_ID }}
+          ADMOB_INTERSTITIAL_UNIT_ID: ${{ secrets.ADMOB_INTERSTITIAL_UNIT_ID }}
           PLAY_REMOVE_ADS_PRODUCT_ID: ${{ secrets.PLAY_REMOVE_ADS_PRODUCT_ID }}
         run: |
           chmod +x gradlew
