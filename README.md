@@ -119,7 +119,7 @@ gpx-link-gui
 gpx-link-gui ./routes/*.gpx
 ```
 
-Use **Open GPX…** to add GPX files to a sidebar list; check or uncheck files to control what is combined on the map. The map pane embeds the same HTML as the CLI `html` command. Initial paths from the command line are added the same way.
+Use **Import GPX…** to add GPX files to a sidebar list; check or uncheck files to control what is combined on the map. The map pane embeds the same HTML as the CLI `html` command. Initial paths from the command line are added the same way.
 
 If **`gpx-link-gui`** is missing or **`ImportError`** appears, install the **`gui`** extra (`pip install 'gpx-link[gui]'` or `uv sync --extra gui` on a checkout) and ensure **Qt WebEngine** is supported on your platform.
 

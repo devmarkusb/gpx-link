@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Maps GPX</string>
-    <string name="open_gpx">Open GPX…</string>
+    <string name="import_gpx">Import GPX…</string>
     <string name="gpx_file_list">GPX file list</string>
     <string name="show_map">Show map</string>
     <string name="select_all_gpx">Select all</string>

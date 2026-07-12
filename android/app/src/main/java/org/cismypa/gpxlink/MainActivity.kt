@@ -263,15 +263,7 @@ class MainActivity : AppCompatActivity() {
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_open -> {
-                    openGpxLauncher.launch(
-                        arrayOf(
-                            "application/gpx+xml",
-                            "application/xml",
-                            "text/xml",
-                            "application/octet-stream",
-                            "*/*",
-                        ),
-                    )
+                    launchGpxImport()
                     true
                 }
                 R.id.action_toggle_file_list -> {
@@ -595,6 +587,18 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun launchGpxImport() {
+        openGpxLauncher.launch(
+            arrayOf(
+                "application/gpx+xml",
+                "application/xml",
+                "text/xml",
+                "application/octet-stream",
+                "*/*",
+            ),
+        )
+    }
+
     private fun showProjectMenu() {
         PopupMenu(this, toolbar, Gravity.START).apply {
             menuInflater.inflate(R.menu.menu_project, menu)
@@ -625,6 +629,10 @@ class MainActivity : AppCompatActivity() {
                         loadProjectLauncher.launch(
                             arrayOf("application/json", "application/*", "*/*"),
                         )
+                        true
+                    }
+                    R.id.action_import_gpx -> {
+                        launchGpxImport()
                         true
                     }
                     R.id.menu_marker_labels -> {

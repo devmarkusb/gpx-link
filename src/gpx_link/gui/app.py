@@ -157,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
             project_menu.addAction("New", self._new_project)
             project_menu.addAction("Save…", self._save_project)
             project_menu.addAction("Load…", self._load_project)
+            project_menu.addAction("Import GPX…", self._open_files)
             self._remove_ads_action = project_menu.addAction(
                 "Remove ads…",
                 self._open_remove_ads_url,
@@ -168,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
             menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             menu_btn.setMenu(project_menu)
             tb.addWidget(menu_btn)
-            tb.addAction("Open GPX…", self._open_files)
+            tb.addAction("Import GPX…", self._open_files)
             tb.addSeparator()
             tb_spacer = QWidget()
             tb_spacer.setSizePolicy(
@@ -672,7 +673,7 @@ def main(argv: list[str] | None = None) -> int:
         def _open_files(self) -> None:
             files, _ = QFileDialog.getOpenFileNames(
                 self,
-                "Open GPX files",
+                "Import GPX files",
                 self._saved_open_directory(),
                 "GPX files (*.gpx *.GPX);;All files (*)",
             )

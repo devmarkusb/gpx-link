@@ -13,6 +13,9 @@
         android:id="@+id/action_project_load"
         android:title="@string/project_load" />
     <item
+        android:id="@+id/action_import_gpx"
+        android:title="@string/import_gpx" />
+    <item
         android:id="@+id/menu_marker_labels"
         android:title="@string/marker_labels" />
     <item
