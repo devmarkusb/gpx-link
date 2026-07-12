@@ -19,12 +19,15 @@
     <string name="location_error">Could not read your location.</string>
     <string name="menu_project_cd">Project menu</string>
     <string name="project_new">New</string>
-    <string name="project_save">Save…</string>
+    <string name="project_save">Save</string>
+    <string name="project_save_as">Save as…</string>
     <string name="project_load">Load…</string>
     <string name="project_new_confirm">Clear all GPX files from this session?</string>
     <string name="project_replace_confirm">Replace the current GPX list with this project?</string>
-    <string name="project_saved">Project saved</string>
+    <string name="project_saved">Project saved to %1$s</string>
+    <string name="project_saved_as">Project saved</string>
     <string name="project_save_failed">Could not save project</string>
+    <string name="project_storage_permission_for_downloads">Storage permission is needed to save into Downloads on this device.</string>
     <string name="project_load_failed">Could not load project</string>
     <string name="project_invalid">This file is not a GPX Link project.</string>
     <string name="project_version">Unsupported project file version.</string>

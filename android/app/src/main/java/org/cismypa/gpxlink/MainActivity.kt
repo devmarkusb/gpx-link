@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.Looper
 import android.os.Message
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -55,7 +56,6 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
-import java.io.OutputStreamWriter
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -143,17 +143,30 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-    private val saveProjectLauncher =
+    private var pendingSaveToDownloads = false
+
+    private val requestWriteStoragePermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted && pendingSaveToDownloads) {
+                pendingSaveToDownloads = false
+                saveProjectToDownloads()
+            } else {
+                pendingSaveToDownloads = false
+            }
+        }
+
+    private val saveProjectAsLauncher =
         registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
             if (uri == null) return@registerForActivityResult
             try {
-                contentResolver.openOutputStream(uri)?.use { os ->
-                    OutputStreamWriter(os, Charsets.UTF_8).use { w ->
-                        w.write(buildProjectJson())
-                    }
-                } ?: error("no output stream")
-                Toast.makeText(this, R.string.project_saved, Toast.LENGTH_SHORT).show()
+                writeProjectJsonToUri(uri)
+                Toast.makeText(this, R.string.project_saved_as, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
+                runCatching {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                        DocumentsContract.deleteDocument(contentResolver, uri)
+                    }
+                }
                 Toast.makeText(
                     this,
                     e.message ?: getString(R.string.project_save_failed),
@@ -601,7 +614,11 @@ class MainActivity : AppCompatActivity() {
                         true
                     }
                     R.id.action_project_save -> {
-                        saveProjectLauncher.launch("project.gpxlink.json")
+                        promptSaveProjectToDownloads()
+                        true
+                    }
+                    R.id.action_project_save_as -> {
+                        saveProjectAsLauncher.launch("project.gpxlink.json")
                         true
                     }
                     R.id.action_project_load -> {
@@ -649,6 +666,62 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun promptSaveProjectToDownloads() {
+        val run = { saveProjectToDownloads() }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingSaveToDownloads = true
+            if (shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                MaterialAlertDialogBuilder(this)
+                    .setMessage(R.string.project_storage_permission_for_downloads)
+                    .setPositiveButton(android.R.string.ok) { _, _ ->
+                        requestWriteStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    }
+                    .setNegativeButton(android.R.string.cancel) { _, _ ->
+                        pendingSaveToDownloads = false
+                    }
+                    .show()
+            } else {
+                requestWriteStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        } else {
+            run()
+        }
+    }
+
+    private fun saveProjectToDownloads() {
+        try {
+            val path =
+                ProjectDownloadsExporter.exportText(
+                    this,
+                    buildProjectJson(),
+                )
+            Toast.makeText(
+                this,
+                getString(R.string.project_saved, path),
+                Toast.LENGTH_LONG,
+            ).show()
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                e.message ?: getString(R.string.project_save_failed),
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    private fun writeProjectJsonToUri(uri: Uri) {
+        val bytes = buildProjectJson().toByteArray(Charsets.UTF_8)
+        contentResolver.openOutputStream(uri, "wt")?.use { os ->
+            os.write(bytes)
+            os.flush()
+        } ?: error(getString(R.string.project_save_failed))
     }
 
     private fun buildProjectJson(): String {

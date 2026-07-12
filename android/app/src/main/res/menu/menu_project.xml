@@ -7,6 +7,9 @@
         android:id="@+id/action_project_save"
         android:title="@string/project_save" />
     <item
+        android:id="@+id/action_project_save_as"
+        android:title="@string/project_save_as" />
+    <item
         android:id="@+id/action_project_load"
         android:title="@string/project_load" />
     <item
