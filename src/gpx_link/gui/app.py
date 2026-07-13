@@ -23,7 +23,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         from PySide6.QtCore import QByteArray, QSettings, Qt, QUrl
-        from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
+        from PySide6.QtGui import (
+            QAction,
+            QCloseEvent,
+            QDesktopServices,
+            QIcon,
+            QKeySequence,
+        )
         from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest, QWebEnginePage
         from PySide6.QtWebEngineWidgets import QWebEngineView
         from PySide6.QtWidgets import (
@@ -93,10 +99,23 @@ def main(argv: list[str] | None = None) -> int:
                 return False
             return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
+    def _app_icon() -> QIcon:
+        icons_dir = Path(__file__).resolve().parent / "icons"
+        icon = QIcon()
+        for size in (16, 32, 64, 128, 256, 512):
+            path = icons_dir / (
+                "app_icon.png" if size == 512 else f"app_icon_{size}.png"
+            )
+            if path.is_file():
+                icon.addFile(str(path))
+        return icon
+
     class MainWindow(QMainWindow):
-        def __init__(self, initial_paths: list[Path]) -> None:
+        def __init__(self, initial_paths: list[Path], app_icon: QIcon) -> None:
             super().__init__()
             self.setWindowTitle("GPX Link")
+            if not app_icon.isNull():
+                self.setWindowIcon(app_icon)
             self._settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
             self._desktop_ad = load_desktop_ad_config(os.environ)
             self._ad_view: QWebEngineView | None = None
@@ -457,6 +476,29 @@ def main(argv: list[str] | None = None) -> int:
             v = self._settings.value(_LAST_OPEN_DIR_KEY, "")
             return v if isinstance(v, str) else ""
 
+        def _exec_file_dialog(
+            self,
+            title: str,
+            filter: str,
+            save: bool = False,
+            multiple: bool = False,
+        ) -> list[str]:
+            dialog = QFileDialog(self, title, self._saved_open_directory(), filter)
+            dialog.setViewMode(QFileDialog.ViewMode.Detail)
+            # Use non-native dialog to avoid 'Date Added' vs 'Date Modified'
+            # issue on macOS
+            dialog.setOption(QFileDialog.Option.DontUseNativeDialog)
+            if save:
+                dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+            elif multiple:
+                dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+            else:
+                dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+
+            if dialog.exec():
+                return dialog.selectedFiles()
+            return []
+
         def _save_last_directory(self, path_or_file: Path) -> None:
             p = path_or_file.expanduser().resolve()
             self._settings.setValue(
@@ -671,11 +713,10 @@ def main(argv: list[str] | None = None) -> int:
             self._reload()
 
         def _open_files(self) -> None:
-            files, _ = QFileDialog.getOpenFileNames(
-                self,
+            files = self._exec_file_dialog(
                 "Import GPX files",
-                self._saved_open_directory(),
                 "GPX files (*.gpx *.GPX);;All files (*)",
+                multiple=True,
             )
             if files:
                 resolved = [Path(f).expanduser().resolve() for f in files]
@@ -738,12 +779,12 @@ def main(argv: list[str] | None = None) -> int:
             }
 
         def _save_project(self) -> None:
-            path, _ = QFileDialog.getSaveFileName(
-                self,
+            files = self._exec_file_dialog(
                 "Save project",
-                self._saved_open_directory(),
                 _PROJECT_FILTER,
+                save=True,
             )
+            path = files[0] if files else ""
             if not path:
                 return
             out = Path(path).expanduser()
@@ -762,12 +803,11 @@ def main(argv: list[str] | None = None) -> int:
             self._save_last_directory(out)
 
         def _load_project(self) -> None:
-            path, _ = QFileDialog.getOpenFileName(
-                self,
+            files = self._exec_file_dialog(
                 "Load project",
-                self._saved_open_directory(),
                 _PROJECT_FILTER,
             )
+            path = files[0] if files else ""
             if not path:
                 return
             src = Path(path).expanduser().resolve()
@@ -1022,7 +1062,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # Do not pass GPX paths as Qt arguments; only the real process argv.
     app = QApplication(sys.argv)
-    win = MainWindow(paths)
+    app_icon = _app_icon()
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
+    win = MainWindow(paths, app_icon)
     win.resize(1000, 700)
     win.show()
     return app.exec()

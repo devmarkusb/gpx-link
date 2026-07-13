@@ -135,10 +135,10 @@ Paths are relative to the repo root.
 | **`android/fastlane/metadata/android/en-US/images/phoneScreenshots/*.png`** | Phone screenshots |
 | **`android/fastlane/metadata/android/en-US/play_store_notes.txt`** | Maintainer checklist and title alternatives |
 
-Regenerate the listing bitmaps (Pillow is not a locked project dependency; the command pulls it for the run):
+Regenerate listing bitmaps and desktop GUI icons (Pillow is not a locked project dependency; the command pulls it for the run):
 
 ```bash
-uv run --with pillow python scripts/generate_play_assets.py
+uv run --with pillow python scripts/generate_brand_assets.py
 ```
 
 Replace placeholder screenshots with real device or emulator captures before a production listing if you want pixel-perfect accuracy.

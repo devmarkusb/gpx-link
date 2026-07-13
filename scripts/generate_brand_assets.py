@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Google Play listing bitmaps under android/fastlane/metadata/.../images/."""
+"""Generate shared brand bitmaps: Play listing graphics and desktop GUI icons."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ NAVY_R = (0x1E, 0x3A, 0x5F)
 _REPO = Path(__file__).resolve().parent.parent
 OUT_DIR = _REPO / "android/fastlane/metadata/android/en-US/images"
 SHOT_DIR = OUT_DIR / "phoneScreenshots"
+DESKTOP_ICON_DIR = _REPO / "src/gpx_link/gui/icons"
+DESKTOP_ICON_SIZES = (16, 32, 64, 128, 256, 512)
 
 
 def try_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -256,6 +258,17 @@ def screenshot_open_flow() -> Image.Image:
     return img
 
 
+def write_desktop_icons(icon: Image.Image) -> None:
+    DESKTOP_ICON_DIR.mkdir(parents=True, exist_ok=True)
+    for size in DESKTOP_ICON_SIZES:
+        path = DESKTOP_ICON_DIR / (
+            "app_icon.png" if size == 512 else f"app_icon_{size}.png"
+        )
+        resized = icon.resize((size, size), Image.Resampling.LANCZOS)
+        resized.save(path, "PNG", optimize=True)
+        print(f"Wrote {path}")
+
+
 def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     SHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -264,6 +277,8 @@ def main() -> int:
     icon_path = OUT_DIR / "icon.png"
     icon.save(icon_path, "PNG", optimize=True)
     print(f"Wrote {icon_path}")
+
+    write_desktop_icons(icon)
 
     feat = gen_feature_1024_500()
     feat_path = OUT_DIR / "featureGraphic.png"

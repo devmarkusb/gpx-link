@@ -10,7 +10,7 @@ Alternatives you can paste into title.txt:
 Regenerate bitmaps
 ----------------
 From repo root:
-  uv run --with pillow python scripts/generate_play_assets.py
+  uv run --with pillow python scripts/generate_brand_assets.py
 
 Outputs (Fastlane default paths):
   images/icon.png                 — 512 x 512

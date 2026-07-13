@@ -163,10 +163,10 @@ There is a native **Android** wrapper under **`android/`** (Kotlin + [Chaquopy](
 
 **`versionName`** and **`versionCode`** come from **`pyproject.toml`** (`project.version`), so bump the Python package version before a store release.
 
-**Store listing text and graphics** for English (US) live under **`android/fastlane/metadata/android/en-US/`**: `title.txt`, `short_description.txt`, `full_description.txt`, optional `promotional_text.txt`, release notes in **`changelogs/<versionCode>.txt`**, and bitmaps under **`images/`** (512×512 icon, 1024×500 feature graphic, phone screenshots). Maintainer notes and alternate titles are in **`play_store_notes.txt`**. Regenerate the PNGs anytime:
+**Store listing text and graphics** for English (US) live under **`android/fastlane/metadata/android/en-US/`**: `title.txt`, `short_description.txt`, `full_description.txt`, optional `promotional_text.txt`, release notes in **`changelogs/<versionCode>.txt`**, and bitmaps under **`images/`** (512×512 icon, 1024×500 feature graphic, phone screenshots). Maintainer notes and alternate titles are in **`play_store_notes.txt`**. Regenerate Play listing PNGs and desktop GUI icons anytime:
 
 ```bash
-uv run --with pillow python scripts/generate_play_assets.py
+uv run --with pillow python scripts/generate_brand_assets.py
 ```
 
 CI builds **debug** APKs on every push/PR; **release** signing and uploads are documented in **[CONTRIBUTING.md](CONTRIBUTING.md)** (GitHub secrets, tags, Fastlane, Play Console).
