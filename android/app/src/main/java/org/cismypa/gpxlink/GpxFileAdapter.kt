@@ -51,5 +51,6 @@ class GpxFileAdapter(
 data class GpxListItem(
     val displayName: String,
     val cachePath: String,
+    val sourceUri: String? = null,
     var checked: Boolean = true,
 )

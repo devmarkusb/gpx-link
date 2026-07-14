@@ -68,6 +68,13 @@ class MainActivity : AppCompatActivity() {
      */
     private data class MapWebState(val ticket: Int, val preservedPanZoom: Triple<Double, Double, Int>?)
 
+    private data class ProjectFileEntry(
+        val path: String,
+        val uri: String?,
+        val checked: Boolean,
+        val label: String,
+    )
+
     private val gpxItems = mutableListOf<GpxListItem>()
     private lateinit var toolbar: MaterialToolbar
     private lateinit var webView: WebView
@@ -120,9 +127,17 @@ class MainActivity : AppCompatActivity() {
                 var index = 0
                 for (uri in uriSnapshot) {
                     try {
-                        val path = copyUriToCache(uri, index)
+                        persistReadableDocumentUri(uri)
+                        val path = copyUriToLocalImport(uri, index)
                         val name = queryDisplayName(uri) ?: File(path).name
-                        imported.add(GpxListItem(displayName = name, cachePath = path, checked = true))
+                        imported.add(
+                            GpxListItem(
+                                displayName = name,
+                                cachePath = path,
+                                sourceUri = uri.toString(),
+                                checked = true,
+                            ),
+                        )
                         index++
                     } catch (e: Exception) {
                         errors.add(readableError(e))
@@ -160,6 +175,7 @@ class MainActivity : AppCompatActivity() {
             if (uri == null) return@registerForActivityResult
             try {
                 writeProjectJsonToUri(uri)
+                persistProjectDocumentPermission(uri)
                 Toast.makeText(this, R.string.project_saved_as, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 runCatching {
@@ -178,6 +194,7 @@ class MainActivity : AppCompatActivity() {
     private val loadProjectLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@registerForActivityResult
+            persistReadableDocumentUri(uri)
             val text =
                 try {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
@@ -664,7 +681,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage(R.string.project_new_confirm)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 for (item in gpxItems) {
-                    File(item.cachePath).delete()
+                    deleteManagedImportPath(item.cachePath)
                 }
                 gpxItems.clear()
                 adapter.notifyDataSetChanged()
@@ -726,10 +743,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun writeProjectJsonToUri(uri: Uri) {
         val bytes = buildProjectJson().toByteArray(Charsets.UTF_8)
-        contentResolver.openOutputStream(uri, "wt")?.use { os ->
-            os.write(bytes)
-            os.flush()
-        } ?: error(getString(R.string.project_save_failed))
+        var lastError: Exception? = null
+        for (mode in arrayOf<String?>("wt", "w", null)) {
+            try {
+                val output =
+                    if (mode == null) {
+                        contentResolver.openOutputStream(uri)
+                    } else {
+                        contentResolver.openOutputStream(uri, mode)
+                    }
+                output?.use { os ->
+                    os.write(bytes)
+                    os.flush()
+                } ?: error(getString(R.string.project_save_failed))
+                return
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+        throw lastError ?: IllegalStateException(getString(R.string.project_save_failed))
     }
 
     private fun buildProjectJson(): String {
@@ -738,6 +770,7 @@ class MainActivity : AppCompatActivity() {
             files.put(
                 JSONObject().apply {
                     put("path", item.cachePath)
+                    item.sourceUri?.takeIf { it.isNotBlank() }?.let { put("uri", it) }
                     put("checked", item.checked)
                     put("label", item.displayName)
                 },
@@ -760,33 +793,47 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyLoadedProject(root: JSONObject, files: JSONArray) {
-        for (item in gpxItems) {
-            File(item.cachePath).delete()
-        }
-        gpxItems.clear()
-        var skipped = 0
-        for (i in 0 until files.length()) {
-            val o = files.optJSONObject(i) ?: continue
-            val pathStr = o.optString("path", "")
-            if (pathStr.isEmpty()) continue
-            val f = File(pathStr)
-            if (!f.isFile()) {
-                skipped++
-                continue
-            }
-            val checked = o.optBoolean("checked", true)
-            val labelRaw = o.optString("label", "")
-            val label = labelRaw.ifBlank { f.name }
-            gpxItems.add(GpxListItem(displayName = label, cachePath = pathStr, checked = checked))
-        }
-        adapter.notifyDataSetChanged()
+        val entries = projectFileEntries(files)
         val showPanel = root.optBoolean("show_file_panel", true)
-        setFilePanelVisible(showPanel)
-        persistGpxSelection()
-        setLastMapView(root.optJSONArray("map_view")?.let { parseJsMapView(it.toString()) })
-        reloadMap()
-        if (skipped > 0) {
-            Toast.makeText(this, R.string.project_missing_paths, Toast.LENGTH_LONG).show()
+        val mapViewRaw = root.optJSONArray("map_view")?.toString()
+        importBusy = true
+        refreshGlobalBusyProgress()
+        importExecutor.execute {
+            val loaded = mutableListOf<GpxListItem>()
+            var skipped = 0
+            for ((index, entry) in entries.withIndex()) {
+                try {
+                    val item = loadProjectEntry(entry, index)
+                    if (item == null) {
+                        skipped++
+                    } else {
+                        loaded.add(item)
+                    }
+                } catch (_: Exception) {
+                    skipped++
+                }
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                val loadedPaths = loaded.mapNotNull { canonicalPathOrNull(it.cachePath) }.toSet()
+                for (item in gpxItems) {
+                    if (canonicalPathOrNull(item.cachePath) !in loadedPaths) {
+                        deleteManagedImportPath(item.cachePath)
+                    }
+                }
+                gpxItems.clear()
+                gpxItems.addAll(loaded)
+                adapter.notifyDataSetChanged()
+                setFilePanelVisible(showPanel)
+                persistGpxSelection()
+                setLastMapView(mapViewRaw?.let { parseJsMapView(it) })
+                importBusy = false
+                refreshGlobalBusyProgress()
+                reloadMap()
+                if (skipped > 0) {
+                    Toast.makeText(this, R.string.project_missing_paths, Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -837,7 +884,7 @@ class MainActivity : AppCompatActivity() {
     private fun removeGpxItemAt(position: Int) {
         if (position !in gpxItems.indices) return
         val removed = gpxItems.removeAt(position)
-        File(removed.cachePath).delete()
+        deleteManagedImportPath(removed.cachePath)
         adapter.notifyItemRemoved(position)
         val rest = gpxItems.size - position
         if (rest > 0) {
@@ -1066,6 +1113,7 @@ class MainActivity : AppCompatActivity() {
                 JSONObject().apply {
                     put("displayName", item.displayName)
                     put("cachePath", item.cachePath)
+                    item.sourceUri?.takeIf { it.isNotBlank() }?.let { put("sourceUri", it) }
                     put("checked", item.checked)
                 },
             )
@@ -1111,11 +1159,19 @@ class MainActivity : AppCompatActivity() {
             val o = arr.optJSONObject(i) ?: continue
             val displayName = o.optString("displayName", "")
             val cachePath = o.optString("cachePath", "")
+            val sourceUri = o.optString("sourceUri", "").takeIf { it.isNotBlank() }
             val checked = o.optBoolean("checked", true)
             if (cachePath.isEmpty()) continue
             if (!File(cachePath).isFile()) continue
             val label = displayName.ifEmpty { File(cachePath).name }
-            gpxItems.add(GpxListItem(displayName = label, cachePath = cachePath, checked = checked))
+            gpxItems.add(
+                GpxListItem(
+                    displayName = label,
+                    cachePath = cachePath,
+                    sourceUri = sourceUri,
+                    checked = checked,
+                ),
+            )
         }
     }
 
@@ -1194,16 +1250,128 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun copyUriToCache(uri: Uri, index: Int): String {
+    private fun copyUriToLocalImport(uri: Uri, index: Int): String {
         val name = queryDisplayName(uri) ?: "import_$index.gpx"
         val safe = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-        val dir = File(cacheDir, "gpx_imports").apply { mkdirs() }
+        val dir = File(filesDir, "gpx_imports").apply { mkdirs() }
         val out = File(dir, "${System.currentTimeMillis()}_${index}_$safe")
         contentResolver.openInputStream(uri)?.use { input ->
             out.outputStream().use { output -> input.copyTo(output) }
         } ?: error("Cannot open document")
         return out.absolutePath
     }
+
+    private fun projectFileEntries(files: JSONArray): List<ProjectFileEntry> {
+        val entries = mutableListOf<ProjectFileEntry>()
+        for (i in 0 until files.length()) {
+            val o = files.optJSONObject(i)
+            if (o == null) {
+                val path = files.optString(i, "")
+                if (path.isBlank()) continue
+                val uri = path.takeIf { isContentUriString(it) }
+                entries.add(
+                    ProjectFileEntry(
+                        path = if (uri == null) path else "",
+                        uri = uri,
+                        checked = true,
+                        label = "",
+                    ),
+                )
+                continue
+            }
+            val pathRaw = o.optString("path", "")
+            val uriRaw = o.optString("uri", "").takeIf { it.isNotBlank() }
+                ?: pathRaw.takeIf { isContentUriString(it) }
+            val path = if (uriRaw == pathRaw) "" else pathRaw
+            if (path.isBlank() && uriRaw.isNullOrBlank()) continue
+            entries.add(
+                ProjectFileEntry(
+                    path = path,
+                    uri = uriRaw,
+                    checked = o.optBoolean("checked", true),
+                    label = o.optString("label", ""),
+                ),
+            )
+        }
+        return entries
+    }
+
+    private fun loadProjectEntry(entry: ProjectFileEntry, index: Int): GpxListItem? {
+        if (entry.path.isNotBlank()) {
+            val f = File(entry.path)
+            if (f.isFile()) {
+                return GpxListItem(
+                    displayName = entry.label.ifBlank { f.name },
+                    cachePath = f.absolutePath,
+                    sourceUri = entry.uri,
+                    checked = entry.checked,
+                )
+            }
+        }
+        val uriRaw = entry.uri ?: return null
+        val uri = Uri.parse(uriRaw)
+        persistReadableDocumentUri(uri)
+        val localPath = copyUriToLocalImport(uri, index)
+        val label = entry.label.ifBlank { queryDisplayName(uri) ?: File(localPath).name }
+        return GpxListItem(
+            displayName = label,
+            cachePath = localPath,
+            sourceUri = uriRaw,
+            checked = entry.checked,
+        )
+    }
+
+    private fun isContentUriString(value: String): Boolean =
+        runCatching { Uri.parse(value).scheme == "content" }.getOrDefault(false)
+
+    private fun persistReadableDocumentUri(uri: Uri) {
+        if (uri.scheme != "content") return
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+    }
+
+    private fun persistProjectDocumentPermission(uri: Uri) {
+        if (uri.scheme != "content") return
+        val flags =
+            listOf(
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        for (flag in flags) {
+            runCatching { contentResolver.takePersistableUriPermission(uri, flag) }
+        }
+    }
+
+    private fun deleteManagedImportPath(path: String) {
+        val target = canonicalFileOrNull(path) ?: return
+        val managedRoots =
+            listOf(
+                File(filesDir, "gpx_imports"),
+                File(cacheDir, "gpx_imports"),
+            ).mapNotNull { root ->
+                try {
+                    root.canonicalFile
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        if (managedRoots.any { root -> target.path.startsWith(root.path + File.separator) }) {
+            target.delete()
+        }
+    }
+
+    private fun canonicalPathOrNull(path: String): String? = canonicalFileOrNull(path)?.path
+
+    private fun canonicalFileOrNull(path: String): File? =
+        try {
+            File(path).canonicalFile
+        } catch (_: Exception) {
+            null
+        }
 
     private fun queryDisplayName(uri: Uri): String? {
         if (uri.scheme == "content") {

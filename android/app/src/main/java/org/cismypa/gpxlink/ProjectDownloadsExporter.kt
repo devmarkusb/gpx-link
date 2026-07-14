@@ -17,7 +17,7 @@ import java.io.File
  */
 object ProjectDownloadsExporter {
 
-    const val FOLDER_NAME = "gpx-link"
+    const val FOLDER_NAME = "MapsGpx"
 
     private const val MIME_JSON = "application/json"
 
@@ -88,7 +88,22 @@ object ProjectDownloadsExporter {
     }
 
     private fun writeToUri(resolver: ContentResolver, uri: Uri, bytes: ByteArray) {
-        resolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
+        var lastError: Exception? = null
+        for (mode in arrayOf<String?>("wt", "w", null)) {
+            try {
+                val output =
+                    if (mode == null) {
+                        resolver.openOutputStream(uri)
+                    } else {
+                        resolver.openOutputStream(uri, mode)
+                    }
+                output?.use { it.write(bytes) } ?: error("Cannot open output stream for $uri")
+                return
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+        throw lastError ?: IllegalStateException("Cannot write $uri")
     }
 
     private fun pickUniqueDisplayName(resolver: ContentResolver, preferredName: String): String {
