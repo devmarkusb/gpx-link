@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -50,7 +51,7 @@ val removeAdsProductId =
 
 android {
     namespace = "org.cismypa.gpxlink"
-    compileSdk = 35
+    compileSdk = 36
 
     buildFeatures {
         buildConfig = true
@@ -59,7 +60,7 @@ android {
     defaultConfig {
         applicationId = "org.cismypa.gpxlink"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = playVersionCode
         versionName = playVersionName
         manifestPlaceholders["admobAppId"] = admobTestAppId
@@ -122,14 +123,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     packaging {
         jniLibs {
             useLegacyPackaging = true
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
@@ -164,6 +167,6 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("com.google.android.gms:play-services-ads:23.6.0")
-    implementation("com.android.billingclient:billing-ktx:7.1.1")
+    implementation("com.android.billingclient:billing-ktx:9.1.0")
     implementation("com.google.android.ump:user-messaging-platform:3.1.0")
 }

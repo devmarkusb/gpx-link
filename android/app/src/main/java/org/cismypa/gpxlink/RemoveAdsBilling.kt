@@ -47,6 +47,7 @@ class RemoveAdsBilling(
                 .enablePendingPurchases(
                     PendingPurchasesParams.newBuilder().enableOneTimeProducts().build(),
                 )
+                .enableAutoServiceReconnection()
                 .build()
         billingClient = client
         client.startConnection(
@@ -84,9 +85,9 @@ class RemoveAdsBilling(
                 .setProductType(BillingClient.ProductType.INAPP)
                 .build()
         val params = QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
-        client.queryProductDetailsAsync(params) { result, list ->
+        client.queryProductDetailsAsync(params) { result, queryProductDetailsResult ->
             if (result.responseCode != BillingClient.BillingResponseCode.OK) return@queryProductDetailsAsync
-            pendingProductDetails = list.firstOrNull()
+            pendingProductDetails = queryProductDetailsResult.productDetailsList.firstOrNull()
         }
     }
 
@@ -104,22 +105,28 @@ class RemoveAdsBilling(
                 .setProductType(BillingClient.ProductType.INAPP)
                 .build()
         val params = QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
-        client.queryProductDetailsAsync(params) { result, list ->
+        client.queryProductDetailsAsync(params) { result, queryProductDetailsResult ->
             if (result.responseCode != BillingClient.BillingResponseCode.OK) return@queryProductDetailsAsync
-            val pd = list.firstOrNull() ?: return@queryProductDetailsAsync
+            val pd = queryProductDetailsResult.productDetailsList.firstOrNull()
+                ?: return@queryProductDetailsAsync
             pendingProductDetails = pd
             activity.runOnUiThread { launchWithDetails(client, pd) }
         }
     }
 
     private fun launchWithDetails(client: BillingClient, details: ProductDetails) {
-        val productParams =
+        val offerToken =
+            details.oneTimePurchaseOfferDetailsList?.firstOrNull()?.offerToken
+                ?: details.oneTimePurchaseOfferDetails?.offerToken
+        val productParamsBuilder =
             BillingFlowParams.ProductDetailsParams.newBuilder()
                 .setProductDetails(details)
-                .build()
+        if (offerToken != null) {
+            productParamsBuilder.setOfferToken(offerToken)
+        }
         val flowParams =
             BillingFlowParams.newBuilder()
-                .setProductDetailsParamsList(listOf(productParams))
+                .setProductDetailsParamsList(listOf(productParamsBuilder.build()))
                 .build()
         client.launchBillingFlow(activity, flowParams)
     }

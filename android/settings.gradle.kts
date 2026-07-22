@@ -4,8 +4,8 @@ pluginManagement {
         mavenCentral()
     }
     plugins {
-        id("com.android.application") version "8.7.2"
-        id("org.jetbrains.kotlin.android") version "2.0.21"
+        id("com.android.application") version "8.9.1"
+        id("org.jetbrains.kotlin.android") version "2.3.21"
         id("com.chaquo.python") version "16.1.0"
     }
 }
