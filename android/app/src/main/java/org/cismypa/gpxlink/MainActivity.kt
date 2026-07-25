@@ -86,9 +86,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adBannerContainer: FrameLayout
     private var removeAdsBilling: RemoveAdsBilling? = null
     private var mapBannerAdView: AdView? = null
-    private var panelTransitionInterstitialAd: InterstitialAd? = null
-    private var panelTransitionInterstitialLoading = false
-    private var panelTransitionInterstitialShowing = false
+    private var interstitialAd: InterstitialAd? = null
+    private var interstitialLoading = false
+    private var interstitialShowing = false
     private var lastNotifiedAdFree: Boolean? = null
     private val importExecutor = Executors.newSingleThreadExecutor()
     private val mapRenderExecutor = Executors.newSingleThreadExecutor()
@@ -377,7 +377,7 @@ class MainActivity : AppCompatActivity() {
             MobileAds.initialize(this) {}
             removeAdsBilling?.start()
             maybeShowBannerAd()
-            maybeLoadPanelTransitionInterstitialAd()
+            maybeLoadInterstitialAd()
         }
     }
 
@@ -386,8 +386,8 @@ class MainActivity : AppCompatActivity() {
         if (adFree) {
             mapBannerAdView?.destroy()
             mapBannerAdView = null
-            panelTransitionInterstitialAd = null
-            panelTransitionInterstitialLoading = false
+            interstitialAd = null
+            interstitialLoading = false
             adBannerContainer.removeAllViews()
             adBannerContainer.visibility = View.GONE
             if (previous == false) {
@@ -396,7 +396,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             adBannerContainer.visibility = View.VISIBLE
             maybeShowBannerAd()
-            maybeLoadPanelTransitionInterstitialAd()
+            maybeLoadInterstitialAd()
         }
         lastNotifiedAdFree = adFree
     }
@@ -428,28 +428,28 @@ class MainActivity : AppCompatActivity() {
         adView.loadAd(AdRequest.Builder().build())
     }
 
-    private fun maybeLoadPanelTransitionInterstitialAd() {
+    private fun maybeLoadInterstitialAd() {
         val billing = removeAdsBilling ?: return
         if (billing.isAdFreeCached()) return
-        if (panelTransitionInterstitialAd != null || panelTransitionInterstitialLoading) return
-        panelTransitionInterstitialLoading = true
+        if (interstitialAd != null || interstitialLoading) return
+        interstitialLoading = true
         InterstitialAd.load(
             this,
             getString(R.string.admob_interstitial_unit_id),
             AdRequest.Builder().build(),
             object : InterstitialAdLoadCallback() {
-                override fun onAdLoaded(interstitialAd: InterstitialAd) {
-                    panelTransitionInterstitialLoading = false
+                override fun onAdLoaded(loadedAd: InterstitialAd) {
+                    interstitialLoading = false
                     if (isFinishing || isDestroyed || removeAdsBilling?.isAdFreeCached() == true) {
-                        panelTransitionInterstitialAd = null
+                        interstitialAd = null
                         return
                     }
-                    panelTransitionInterstitialAd = interstitialAd
+                    interstitialAd = loadedAd
                 }
 
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
-                    panelTransitionInterstitialLoading = false
-                    panelTransitionInterstitialAd = null
+                    interstitialLoading = false
+                    interstitialAd = null
                 }
             },
         )
@@ -457,37 +457,35 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestFilePanelVisible(visible: Boolean) {
         if ((filePanel.visibility == View.VISIBLE) == visible) return
-        showPanelTransitionInterstitialThen {
-            setFilePanelVisible(visible)
-        }
+        setFilePanelVisible(visible)
     }
 
-    private fun showPanelTransitionInterstitialThen(onFinished: () -> Unit) {
+    private fun showInterstitialThen(onFinished: () -> Unit) {
         val billing = removeAdsBilling
-        val interstitialAd = panelTransitionInterstitialAd
+        val ad = interstitialAd
         if (
             billing?.isAdFreeCached() == true ||
-                interstitialAd == null ||
-                panelTransitionInterstitialShowing
+                ad == null ||
+                interstitialShowing
         ) {
             onFinished()
-            maybeLoadPanelTransitionInterstitialAd()
+            maybeLoadInterstitialAd()
             return
         }
 
-        panelTransitionInterstitialAd = null
-        panelTransitionInterstitialShowing = true
+        interstitialAd = null
+        interstitialShowing = true
         var finished = false
         fun finishTransition() {
             if (finished) return
             finished = true
-            panelTransitionInterstitialShowing = false
+            interstitialShowing = false
             if (isFinishing || isDestroyed) return
             onFinished()
-            maybeLoadPanelTransitionInterstitialAd()
+            maybeLoadInterstitialAd()
         }
 
-        interstitialAd.fullScreenContentCallback =
+        ad.fullScreenContentCallback =
             object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     finishTransition()
@@ -497,7 +495,7 @@ class MainActivity : AppCompatActivity() {
                     finishTransition()
                 }
             }
-        interstitialAd.show(this)
+        ad.show(this)
     }
 
     private fun promptRemoveAdsPurchase() {
@@ -605,15 +603,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun launchGpxImport() {
-        openGpxLauncher.launch(
-            arrayOf(
-                "application/gpx+xml",
-                "application/xml",
-                "text/xml",
-                "application/octet-stream",
-                "*/*",
-            ),
-        )
+        showInterstitialThen {
+            openGpxLauncher.launch(
+                arrayOf(
+                    "application/gpx+xml",
+                    "application/xml",
+                    "text/xml",
+                    "application/octet-stream",
+                    "*/*",
+                ),
+            )
+        }
     }
 
     private fun showProjectMenu() {
@@ -897,9 +897,9 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         mapBannerAdView?.destroy()
         mapBannerAdView = null
-        panelTransitionInterstitialAd = null
-        panelTransitionInterstitialLoading = false
-        panelTransitionInterstitialShowing = false
+        interstitialAd = null
+        interstitialLoading = false
+        interstitialShowing = false
         removeAdsBilling?.close()
         removeAdsBilling = null
         importExecutor.shutdownNow()
