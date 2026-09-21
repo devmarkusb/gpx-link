@@ -388,6 +388,7 @@ gui = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "click" },
     { name = "detect-secrets" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -405,6 +406,7 @@ provides-extras = ["gui"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "click", specifier = ">=8.3.3,<8.5.0" },
     { name = "detect-secrets", specifier = ">=1.5.0" },
     { name = "pre-commit", specifier = ">=4.6.0" },
     { name = "pytest", specifier = ">=9.0.3" },

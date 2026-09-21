@@ -32,6 +32,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "click>=8.3.3,<8.5.0",
     "detect-secrets>=1.5.0",
     "pre-commit>=4.6.0",
     "pytest>=9.0.3",
