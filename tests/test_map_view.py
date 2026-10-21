@@ -20,6 +20,13 @@ from gpx_link.map_view import parse_map_view
         [float("nan"), 2, 3],
         [1, float("inf"), 3],
         "[1,2,1e309]",
+        [120, 2, 3],
+        [-90.0001, 2, 3],
+        [90.0001, 2, 3],
+        [1, 2, -3],
+        [1, 2, -0.001],
+        [1, 2, 19.001],
+        [1, 2, 20],
     ],
 )
 def test_invalid_view_is_ignored(raw: object) -> None:
@@ -29,6 +36,12 @@ def test_invalid_view_is_ignored(raw: object) -> None:
 def test_wrapped_longitude_and_fractional_zoom_are_preserved() -> None:
     assert parse_map_view("[45, 540, 12.4]") == (45.0, 540.0, 12)
     assert parse_map_view((45, 540, 12)) == (45.0, 540.0, 12)
+
+
+@pytest.mark.parametrize("lat", [-90, 90])
+@pytest.mark.parametrize("zoom", [0, 19])
+def test_supported_viewport_boundaries(lat: float, zoom: int) -> None:
+    assert parse_map_view([lat, -540, zoom]) == (lat, -540, zoom)
 
 
 def test_invalid_initial_view_does_not_break_map_document() -> None:

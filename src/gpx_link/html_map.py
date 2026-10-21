@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from gpx_link.bounds import Bounds, bounds_for_map
-from gpx_link.map_view import parse_map_view
+from gpx_link.map_view import MAX_MAP_ZOOM, MIN_MAP_ZOOM, parse_map_view
 from gpx_link.maps_urls import google_maps_url
 from gpx_link.models import GeoPath, Waypoint
 from gpx_link.simplify import simplify_polyline_points
@@ -344,11 +344,12 @@ def _leaflet_html_document(
       zoomAnimation: true,
       center: [{boot_lat_js}, {boot_lon_js}],
       zoom: {boot_zoom},
+      minZoom: {MIN_MAP_ZOOM},
     }});
     const vectorRenderer = L.canvas({{ padding: 0.5 }});
     const baseLayers = {{
       osm: L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-        maxZoom: 19,
+        maxZoom: {MAX_MAP_ZOOM},
         fadeAnimation: false,
         attribution: '&copy; OpenStreetMap contributors'
       }}),

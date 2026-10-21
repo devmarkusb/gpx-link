@@ -274,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
 
             self._apply_file_panel_visibility(show_panel)
 
+            self._fit_imported_features = False
             self._restore_gpx_file_list_from_settings()
             self._add_paths_to_list(initial_paths)
             self._map_shell_ready = False
@@ -535,10 +536,12 @@ def main(argv: list[str] | None = None) -> int:
             if app is not None:
                 app.processEvents()
 
-        def _store_map_view(self, result: object) -> None:
+        def _store_map_view(self, result: object) -> bool:
             view = self._coerce_map_view(result)
             if view is not None:
                 self._set_map_view(view)
+                return True
+            return False
 
         def _marker_labels_from_combo(self) -> str:
             data = self._marker_labels_combo.currentData()
@@ -551,6 +554,9 @@ def main(argv: list[str] | None = None) -> int:
 
         def _refresh_map_marker_labels(self) -> None:
             if not self._map_shell_ready:
+                return
+            if self._fit_imported_features:
+                self._reload()
                 return
             payload = build_map_js_payload(
                 self._last_wpts,
@@ -573,13 +579,17 @@ def main(argv: list[str] | None = None) -> int:
                 "(function(){ gpxLinkApplyPayload("
                 + lit
                 + "); var c = map.getCenter(); "
-                "return [c.lat, c.lng, map.getZoom()]; })()"
+                "return JSON.stringify([c.lat, c.lng, map.getZoom()]); })()"
             )
 
             def _done(result: object) -> None:
                 if generation != self._reload_generation:
                     return
-                self._store_map_view(result)
+                if (
+                    self._store_map_view(result)
+                    and payload.get("fitBounds") is not None
+                ):
+                    self._fit_imported_features = False
                 if when_done is not None:
                     when_done()
 
@@ -616,6 +626,8 @@ def main(argv: list[str] | None = None) -> int:
             self._file_list.blockSignals(True)
             try:
                 existing = self._paths_in_list()
+                if paths and not existing:
+                    self._fit_imported_features = True
                 for p in paths:
                     resolved = p.expanduser().resolve()
                     key = str(resolved)
@@ -720,6 +732,7 @@ def main(argv: list[str] | None = None) -> int:
             finally:
                 self._file_list.blockSignals(False)
             self._parse_cache.clear()
+            self._fit_imported_features = False
             self._set_map_view(None)
             self._persist_gpx_file_list()
 
@@ -982,7 +995,7 @@ def main(argv: list[str] | None = None) -> int:
             js = (
                 "(function(){ map.fitBounds(" + lit + ", { animate: false }); "
                 "var c = map.getCenter(); "
-                "return [c.lat, c.lng, map.getZoom()]; })()"
+                "return JSON.stringify([c.lat, c.lng, map.getZoom()]); })()"
             )
 
             def _done(result: object) -> None:
@@ -1034,7 +1047,7 @@ def main(argv: list[str] | None = None) -> int:
                         return
                 self._last_wpts = wpts
                 self._last_geopaths = geopaths
-                if self._last_map_view is None:
+                if self._fit_imported_features or self._last_map_view is None:
                     payload = build_map_js_payload(
                         wpts,
                         geopaths,

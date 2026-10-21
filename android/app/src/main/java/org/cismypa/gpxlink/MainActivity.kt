@@ -113,6 +113,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Last pan/zoom from the Leaflet map; passed into [reloadMap] so GPX toggles do not refit. */
     private var lastMapView: Triple<Double, Double, Int>? = null
+    private var fitImportedFeatures = false
 
     private val locationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -164,7 +165,7 @@ class MainActivity : AppCompatActivity() {
                         }
                         return@runOnUiThread
                     }
-                    gpxItems.addAll(imported)
+                    addImportedGpxItems(imported)
                     for (text in errors) {
                         Toast.makeText(this, text, Toast.LENGTH_LONG).show()
                     }
@@ -283,10 +284,10 @@ class MainActivity : AppCompatActivity() {
 
         val restoredMapView = savedInstanceState?.let { b ->
             if (b.containsKey(STATE_MAP_LAT) && b.containsKey(STATE_MAP_LON) && b.containsKey(STATE_MAP_ZOOM)) {
-                Triple(
+                validatedMapView(
                     b.getDouble(STATE_MAP_LAT),
                     b.getDouble(STATE_MAP_LON),
-                    b.getInt(STATE_MAP_ZOOM),
+                    b.getInt(STATE_MAP_ZOOM).toDouble(),
                 )
             } else {
                 null
@@ -701,6 +702,7 @@ class MainActivity : AppCompatActivity() {
     private fun promptNewProject() {
         if (gpxItems.isEmpty()) {
             projectGeneration += 1
+            fitImportedFeatures = false
             setLastMapView(null)
             reloadMap(captureCurrentView = false)
             return
@@ -709,6 +711,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage(R.string.project_new_confirm)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 projectGeneration += 1
+                fitImportedFeatures = false
                 for (item in gpxItems) {
                     deleteManagedImportPath(item.cachePath)
                 }
@@ -862,6 +865,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 gpxItems.clear()
                 gpxItems.addAll(loaded)
+                fitImportedFeatures = false
                 adapter.notifyDataSetChanged()
                 setFilePanelVisible(showPanel)
                 persistGpxSelection()
@@ -1026,7 +1030,7 @@ class MainActivity : AppCompatActivity() {
             ) { raw ->
                 if ((wv.tag as? MapWebState)?.ticket != ticket) return@evaluateJavascript
                 if (state.requestGeneration != renderRequestGeneration) return@evaluateJavascript
-                parseJsMapView(raw)?.let { setLastMapView(it) }
+                storeMapViewFromPage(raw, state)
             }
         }
     }
@@ -1036,12 +1040,23 @@ class MainActivity : AppCompatActivity() {
         return try {
             val arr = JSONArray(raw)
             if (arr.length() < 3) return null
-            val lat = arr.getDouble(0)
-            val lon = arr.getDouble(1)
-            if (!lat.isFinite() || !lon.isFinite() || !arr.getDouble(2).isFinite()) return null
-            Triple(lat, lon, arr.getInt(2))
+            validatedMapView(arr.getDouble(0), arr.getDouble(1), arr.getDouble(2))
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private fun validatedMapView(lat: Double, lon: Double, zoom: Double): Triple<Double, Double, Int>? {
+        if (!lat.isFinite() || !lon.isFinite() || !zoom.isFinite()) return null
+        if (lat !in -90.0..90.0 || zoom !in MIN_MAP_ZOOM.toDouble()..MAX_MAP_ZOOM.toDouble()) return null
+        // Match Python's parse_map_view, including fractional zoom rounding.
+        return Triple(lat, lon, kotlin.math.round(zoom).toInt())
+    }
+
+    private fun storeMapViewFromPage(raw: String?, state: MapWebState) {
+        parseJsMapView(raw)?.let {
+            setLastMapView(it)
+            if (state.preservedPanZoom == null) fitImportedFeatures = false
         }
     }
 
@@ -1205,7 +1220,7 @@ class MainActivity : AppCompatActivity() {
         val state = webView.tag as? MapWebState ?: return
         if (mapBusy || state.requestGeneration != renderRequestGeneration) return
         if (title == null || !title.startsWith(MAP_VIEW_TITLE_PREFIX)) return
-        parseJsMapView(title.removePrefix(MAP_VIEW_TITLE_PREFIX))?.let { setLastMapView(it) }
+        storeMapViewFromPage(title.removePrefix(MAP_VIEW_TITLE_PREFIX), state)
     }
 
     private fun loadPersistedGpxSelection() {
@@ -1238,6 +1253,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun addImportedGpxItems(imported: List<GpxListItem>) {
+        if (gpxItems.isEmpty() && imported.isNotEmpty()) {
+            fitImportedFeatures = true
+            setLastMapView(null)
+        }
+        gpxItems.addAll(imported)
+    }
+
     private fun checkedPaths(): List<String> = gpxItems.filter { it.checked }.map { it.cachePath }
 
     private fun reloadMap(captureCurrentView: Boolean = true) {
@@ -1245,7 +1268,9 @@ class MainActivity : AppCompatActivity() {
         val rq = renderRequestGeneration
         mapBusy = true
         refreshGlobalBusyProgress()
-        if (captureCurrentView) {
+        if (fitImportedFeatures) {
+            renderMapForCurrentSelection(rq, null)
+        } else if (captureCurrentView) {
             captureMapViewForReload(rq)
         } else {
             renderMapForCurrentSelection(rq, lastMapView)
@@ -1614,6 +1639,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private companion object {
+        // Keep aligned with gpx_link.map_view and the OSM layer in html_map.py.
+        const val MIN_MAP_ZOOM = 0
+        const val MAX_MAP_ZOOM = 19
         const val STATE_FILE_PANEL_VISIBLE = "file_panel_visible"
         const val STATE_MAP_LAT = "map_lat"
         const val STATE_MAP_LON = "map_lon"

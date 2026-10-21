@@ -54,8 +54,13 @@ class MainActivityTest {
 
     private class RecordingWebView(context: Context) : WebView(context) {
         val callbacks = mutableListOf<ValueCallback<String>?>()
+        val posted = mutableListOf<Runnable>()
         var loadedUrl: String? = null
         var historyUrl: String? = null
+        override fun post(action: Runnable): Boolean {
+            posted.add(action)
+            return true
+        }
         override fun evaluateJavascript(script: String, resultCallback: ValueCallback<String>?) {
             callbacks.add(resultCallback)
         }
@@ -153,12 +158,75 @@ class MainActivityTest {
     }
 
     @Test
-    fun nonFiniteProjectViewIsIgnored() {
+    fun invalidProjectViewIsIgnored() {
         val (activity, _) = activity()
         val method = MainActivity::class.java.getDeclaredMethod("parseJsMapView", String::class.java)
         method.isAccessible = true
-        assertNull(method.invoke(activity, "[\"NaN\",2,3]"))
-        assertNull(method.invoke(activity, "[1,2,1e309]"))
+        for (raw in listOf(
+            "[\"NaN\",2,3]", "[1,2,1e309]", "[120,2,3]", "[-90.001,2,3]",
+            "[1,2,-3]", "[1,2,-0.001]", "[1,2,19.001]", "[1,2,20]",
+        )) {
+            assertNull(raw, method.invoke(activity, raw))
+        }
+        assertEquals(Triple(90.0, -540.0, 19), method.invoke(activity, "[90,-540,19]"))
+        assertEquals(Triple(-90.0, 540.0, 0), method.invoke(activity, "[-90,540,0]"))
+        assertEquals(Triple(45.0, 540.0, 13), method.invoke(activity, "[45,540,12.6]"))
+    }
+
+    @Test
+    fun invalidSavedViewportDoesNotDiscardProjectFiles() {
+        val (activity, web) = activity()
+        val path = File(activity.filesDir, "viewport.gpx").apply { writeText("<gpx/>") }
+        val files = JSONArray().put(JSONObject().put("path", path.path))
+        val executor = ReflectionHelpers.getField<QueuedExecutor>(activity, "importExecutor")
+        for (view in listOf("[120,2,3]", "[1,2,-3]", "[1,2,20]", "[48.85,540,11]")) {
+            call(activity, "applyLoadedProject", JSONObject().put("map_view", JSONArray(view)), files)
+            executor.tasks.removeAt(0).run()
+            val items = ReflectionHelpers.getField<MutableList<GpxListItem>>(activity, "gpxItems")
+            assertEquals(listOf(path.path), items.map { it.cachePath })
+            assertTrue(web.callbacks.isEmpty()) // Loading uses saved state, never the old page.
+            val expected = if (view == "[48.85,540,11]") Triple(48.85, 540.0, 11) else null
+            assertEquals(expected, ReflectionHelpers.getField<Any?>(activity, "lastMapView"))
+        }
+    }
+
+    @Test
+    fun firstImportFitsBeforeSelectionChangesPreserveTheView() {
+        val (activity, web) = activity()
+        call(activity, "setLastMapView", Triple(20.0, 0.0, 2))
+        call(activity, "addImportedGpxItems", listOf(GpxListItem("New GPX", "/new.gpx")))
+        call(activity, "reloadMap", true)
+        assertTrue(web.callbacks.isEmpty()) // The default page must not supply a saved view.
+        assertNull(ReflectionHelpers.getField<Any?>(activity, "lastMapView"))
+
+        val rq = ReflectionHelpers.getField<Int>(activity, "renderRequestGeneration")
+        val html = JSONObject().put("ok", true).put("html", "<html></html>")
+        call(activity, "applyMapPayload", rq, html, null)
+        call(activity, "onMapWebPageFinished", web, web.loadedUrl)
+        web.posted.removeAt(0).run()
+        web.callbacks.removeAt(0)!!.onReceiveValue("[45.75,-122.75,10]")
+        assertEquals(Triple(45.75, -122.75, 10), ReflectionHelpers.getField<Any>(activity, "lastMapView"))
+
+        call(activity, "unselectAllGpx")
+        assertEquals(1, web.callbacks.size)
+        web.callbacks.removeAt(0)!!.onReceiveValue("[45.75,-122.75,10]")
+        call(activity, "selectAllGpx")
+        assertEquals(1, web.callbacks.size)
+        assertEquals(Triple(45.75, -122.75, 10), ReflectionHelpers.getField<Any>(activity, "lastMapView"))
+    }
+
+    @Test
+    fun loadingAProjectWithASavedViewOverridesAPendingImportFit() {
+        val (activity, web) = activity()
+        call(activity, "addImportedGpxItems", listOf(GpxListItem("Pending import", "/pending.gpx")))
+        val path = File(activity.filesDir, "saved.gpx").apply { writeText("<gpx/>") }
+        val root = JSONObject().put("map_view", JSONArray("[48.85,540,11]"))
+        val files = JSONArray().put(JSONObject().put("path", path.path))
+        call(activity, "applyLoadedProject", root, files)
+        ReflectionHelpers.getField<QueuedExecutor>(activity, "importExecutor").tasks.single().run()
+        call(activity, "reloadMap", true)
+        assertEquals(1, web.callbacks.size)
+        assertEquals(Triple(48.85, 540.0, 11), ReflectionHelpers.getField<Any>(activity, "lastMapView"))
     }
 
     @Test

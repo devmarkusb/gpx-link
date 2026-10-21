@@ -36,3 +36,16 @@ def test_render_reports_invalid_gpx(sample_gpx_path: Path) -> None:
     result = json.loads(bridge.render(json.dumps([str(sample_gpx_path)])))
     assert result["ok"] is False
     assert result["error"]
+
+
+@pytest.mark.parametrize("view", ["[120,2,3]", "[1,2,-3]", "[1,2,20]"])
+def test_invalid_saved_view_keeps_gpx_features_and_fits_them(
+    sample_gpx_path: Path,
+    view: str,
+) -> None:
+    result = json.loads(bridge.render(json.dumps([str(sample_gpx_path)]), view))
+    assert result["ok"] is True
+    assert '"initialView":null' in result["html"]
+    assert '"fitBounds":null' not in result["html"]
+    assert '"name":"Alpha"' in result["html"]
+    assert '"name":"Beta"' in result["html"]
