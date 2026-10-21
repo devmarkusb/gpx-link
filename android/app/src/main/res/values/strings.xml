@@ -13,6 +13,7 @@
     <string name="gpx_empty_features">No waypoints, track points, or route points found in the selected file(s).</string>
     <string name="my_location_cd">Center map on my location</string>
     <string name="my_location_tooltip">My location</string>
+    <string name="no_link_handler">No app available to open this link.</string>
     <string name="location_permission_denied">Location permission is required to show your position on the map.</string>
     <string name="location_provider_disabled">Turn on location (GPS or network) to find your position.</string>
     <string name="location_searching">Getting location…</string>

@@ -6,6 +6,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from gpxpy.gpx import GPXException
+
 from gpx_link.bounds import bounds_for_map
 from gpx_link.desktop_ads import DesktopAdConfig, load_desktop_ad_config
 from gpx_link.html_map import (
@@ -13,6 +15,7 @@ from gpx_link.html_map import (
     build_map_js_payload,
     map_js_payload_literal,
 )
+from gpx_link.map_view import parse_map_view
 from gpx_link.models import GeoPath, Waypoint
 from gpx_link.parser import load_map_features_from_paths_cached
 
@@ -280,6 +283,7 @@ def main(argv: list[str] | None = None) -> int:
             self._last_map_view = self._restore_map_view_from_settings()
             self._last_wpts: list[Waypoint] = []
             self._last_geopaths: list[GeoPath] = []
+            self._reload_generation = 0
             self._reload()
 
         def _build_desktop_ad_view(self) -> QWebEngineView | None:
@@ -338,25 +342,7 @@ def main(argv: list[str] | None = None) -> int:
             self,
             raw: object,
         ) -> tuple[float, float, int] | None:
-            data = raw
-            if isinstance(raw, str):
-                s = raw.strip()
-                if not s:
-                    return None
-                try:
-                    data = json.loads(s)
-                except json.JSONDecodeError:
-                    return None
-            if not isinstance(data, (list, tuple)) or len(data) < 3:
-                return None
-            try:
-                return (
-                    float(data[0]),
-                    float(data[1]),
-                    int(round(float(data[2]))),
-                )
-            except (TypeError, ValueError):
-                return None
+            return parse_map_view(raw)
 
         def _restore_map_view_from_settings(self) -> tuple[float, float, int] | None:
             return self._coerce_map_view(self._settings.value(_MAP_VIEW_KEY, ""))
@@ -581,6 +567,7 @@ def main(argv: list[str] | None = None) -> int:
             *,
             when_done: Callable[[], None] | None = None,
         ) -> None:
+            generation = self._reload_generation
             lit = map_js_payload_literal(payload)
             js = (
                 "(function(){ gpxLinkApplyPayload("
@@ -590,6 +577,8 @@ def main(argv: list[str] | None = None) -> int:
             )
 
             def _done(result: object) -> None:
+                if generation != self._reload_generation:
+                    return
                 self._store_map_view(result)
                 if when_done is not None:
                     when_done()
@@ -797,7 +786,7 @@ def main(argv: list[str] | None = None) -> int:
                     ensure_ascii=False,
                 )
                 out.write_text(body + "\n", encoding="utf-8")
-            except OSError as e:
+            except (OSError, UnicodeError) as e:
                 QMessageBox.warning(self, "GPX Link", str(e))
                 return
             self._save_last_directory(out)
@@ -813,7 +802,7 @@ def main(argv: list[str] | None = None) -> int:
             src = Path(path).expanduser().resolve()
             try:
                 raw = src.read_text(encoding="utf-8")
-            except OSError as e:
+            except (OSError, UnicodeError) as e:
                 QMessageBox.warning(self, "GPX Link", str(e))
                 return
             try:
@@ -919,7 +908,10 @@ def main(argv: list[str] | None = None) -> int:
 
             b64 = data.get("splitter_state_b64")
             if show_panel and isinstance(b64, str) and b64.strip():
-                restored = QByteArray.fromBase64(b64.strip().encode("ascii"))
+                try:
+                    restored = QByteArray.fromBase64(b64.strip().encode("ascii"))
+                except UnicodeEncodeError:
+                    restored = QByteArray()
                 if not restored.isEmpty():
                     self._splitter.restoreState(restored)
 
@@ -957,15 +949,20 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 return
             self._show_status_progress_determinate(len(paths), "Reading GPX — %p%")
+            generation = self._reload_generation
             try:
                 wpts, geopaths = load_map_features_from_paths_cached(
                     paths,
                     self._parse_cache,
                     progress=self._parse_progress_tick,
                 )
-            except OSError as e:
+            except (OSError, GPXException) as e:
+                if generation != self._reload_generation:
+                    return
                 self._hide_status_progress()
                 QMessageBox.warning(self, "GPX", str(e))
+                return
+            if generation != self._reload_generation:
                 return
             b = bounds_for_map(wpts, geopaths)
             if b is None:
@@ -989,12 +986,16 @@ def main(argv: list[str] | None = None) -> int:
             )
 
             def _done(result: object) -> None:
+                if generation != self._reload_generation:
+                    return
                 self._store_map_view(result)
                 self._hide_status_progress()
 
             self._web.page().runJavaScript(js, _done)
 
         def _reload(self) -> None:
+            self._reload_generation += 1
+            generation = self._reload_generation
             self._prune_parse_cache()
             paths = self._checked_paths()
             if not paths:
@@ -1015,9 +1016,13 @@ def main(argv: list[str] | None = None) -> int:
                         self._parse_cache,
                         progress=self._parse_progress_tick,
                     )
-                except OSError as e:
+                except (OSError, GPXException) as e:
+                    if generation != self._reload_generation:
+                        return
                     self._hide_status_progress()
                     QMessageBox.warning(self, "GPX", str(e))
+                    return
+                if generation != self._reload_generation:
                     return
                 if not wpts and not geopaths:
                     msg = (
@@ -1025,6 +1030,8 @@ def main(argv: list[str] | None = None) -> int:
                         "in the selected file(s)."
                     )
                     QMessageBox.information(self, "GPX", msg)
+                    if generation != self._reload_generation:
+                        return
                 self._last_wpts = wpts
                 self._last_geopaths = geopaths
                 if self._last_map_view is None:

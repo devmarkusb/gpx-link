@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from gpx_link.html_map import (
     build_leaflet_html,
@@ -149,3 +153,25 @@ def test_build_leaflet_html_renders_track_polyline() -> None:
     assert "L.polyline" in html
     assert "45.51" in html and "-122.5" in html
     assert "map.fitBounds" in html
+
+
+def test_build_map_js_payload_skips_empty_paths() -> None:
+    empty = GeoPath(Path("/empty.gpx"), "Empty", "track", ())
+    point = GeoPath(Path("/point.gpx"), "Point", "route", ((1.0, 2.0),))
+    payload = build_map_js_payload([], [empty, point])
+    assert len(payload["paths"]) == 1
+    assert payload["paths"][0]["coords"] == [[1.0, 2.0]]
+
+
+def test_old_marker_refresh_cannot_override_new_label_mode() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is needed for the generated map runtime regression")
+    result = subprocess.run(
+        [node, str(Path(__file__).with_name("leaflet_runtime.cjs"))],
+        input=build_leaflet_map_shell_html(),
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr

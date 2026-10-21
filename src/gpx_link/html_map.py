@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from gpx_link.bounds import Bounds, bounds_for_map
+from gpx_link.map_view import parse_map_view
 from gpx_link.maps_urls import google_maps_url
 from gpx_link.models import GeoPath, Waypoint
 from gpx_link.simplify import simplify_polyline_points
@@ -52,17 +53,7 @@ def _bootstrap_map_view_from_script_payload_literal(
         payload = json.loads(auto_apply_payload_literal)
     except json.JSONDecodeError:
         return _BOOTSTRAP_WORLD
-    iv = payload.get("initialView")
-    if isinstance(iv, list) and len(iv) >= 3:
-        try:
-            return (
-                float(iv[0]),
-                float(iv[1]),
-                int(round(float(iv[2]))),
-            )
-        except (TypeError, ValueError):
-            pass
-    return _BOOTSTRAP_WORLD
+    return parse_map_view(payload.get("initialView")) or _BOOTSTRAP_WORLD
 
 
 def _json_for_script(data: object) -> str:
@@ -108,6 +99,8 @@ def build_map_js_payload(
         )
     line_features: list[dict[str, object]] = []
     for p in geopaths:
+        if not p.points:
+            continue
         coords = simplify_polyline_points(
             p.points,
             epsilon_m=_EPSILON_M_TRACK,
@@ -140,8 +133,9 @@ def build_map_js_payload(
         fit = None
 
     initial_view: list[float] | None
-    if map_center_and_zoom is not None:
-        lat, lon, z = map_center_and_zoom
+    view = parse_map_view(map_center_and_zoom)
+    if view is not None:
+        lat, lon, z = view
         initial_view = [lat, lon, float(z)]
     else:
         initial_view = None
@@ -400,7 +394,7 @@ def _leaflet_html_document(
     const GPX_VIEWPORT_TITLE_PREFIX = 'gpx-link-map-view:';
     function gpxDebounce(fn, waitMs) {{
       let tid = null;
-      return function () {{
+      const debounced = function () {{
         clearTimeout(tid);
         const self = this;
         const args = arguments;
@@ -408,6 +402,8 @@ def _leaflet_html_document(
           fn.apply(self, args);
         }}, waitMs);
       }};
+      debounced.cancel = function () {{ clearTimeout(tid); }};
+      return debounced;
     }}
     function gpxLinkCurrentMapView() {{
       const c = map.getCenter();
@@ -433,6 +429,7 @@ def _leaflet_html_document(
 
     window.gpxLinkApplyPayload = function (payload) {{
       if (window._gpxPoiMoveListener) {{
+        window._gpxPoiMoveListener.cancel();
         map.off('moveend', window._gpxPoiMoveListener);
         map.off('zoomend', window._gpxPoiMoveListener);
         window._gpxPoiMoveListener = null;

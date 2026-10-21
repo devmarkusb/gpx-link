@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, MutableMapping
 from pathlib import Path
 from typing import Any
 
 import gpxpy
+from gpxpy.gpx import GPXException
 
 from gpx_link.models import GeoPath, Waypoint
 
@@ -59,13 +61,25 @@ def load_waypoints_from_files(files: list[str]) -> list[Waypoint]:
     return load_waypoints_from_paths([Path(f).expanduser().resolve() for f in files])
 
 
+def _validated_latlon(latitude: float, longitude: float) -> tuple[float, float]:
+    lat, lon = float(latitude), float(longitude)
+    if (
+        not math.isfinite(lat)
+        or not math.isfinite(lon)
+        or not -90 <= lat <= 90
+        or not -180 <= lon <= 180
+    ):
+        raise GPXException("Invalid GPX coordinate: expected finite latitude/longitude")
+    return lat, lon
+
+
 def _coords_latlon(segment_points: list[Any]) -> tuple[tuple[float, float], ...]:
     out: list[tuple[float, float]] = []
     for p in segment_points:
         lat, lon = p.latitude, p.longitude
         if lat is None or lon is None:
             continue
-        out.append((float(lat), float(lon)))
+        out.append(_validated_latlon(lat, lon))
     return tuple(out)
 
 
@@ -79,6 +93,7 @@ def _load_one(path: Path) -> tuple[list[Waypoint], list[GeoPath]]:
     resolved = path.resolve()
     result: list[Waypoint] = []
     for w in gpx.waypoints:
+        lat, lon = _validated_latlon(w.latitude, w.longitude)
         name = (w.name or "").strip() or "Waypoint"
         sym = (w.symbol or "").strip() or None
         wpt_type = (w.type or "").strip() or None
@@ -86,8 +101,8 @@ def _load_one(path: Path) -> tuple[list[Waypoint], list[GeoPath]]:
             Waypoint(
                 source_path=resolved,
                 name=name,
-                latitude=float(w.latitude),
-                longitude=float(w.longitude),
+                latitude=lat,
+                longitude=lon,
                 elevation_m=float(w.elevation) if w.elevation is not None else None,
                 description=(w.description or "").strip() or None,
                 symbol=sym,

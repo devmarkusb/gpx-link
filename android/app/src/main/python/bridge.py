@@ -7,24 +7,12 @@ from pathlib import Path
 
 from gpx_link.bounds import bounds_for_map
 from gpx_link.html_map import build_leaflet_html
+from gpx_link.map_view import parse_map_view
 from gpx_link.parser import load_map_features_from_paths
 
 
 def _parse_map_view_tuple(map_view_json: str) -> tuple[float, float, int] | None:
-    try:
-        raw = json.loads(map_view_json)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(raw, list) or len(raw) < 3:
-        return None
-    try:
-        return (
-            float(raw[0]),
-            float(raw[1]),
-            int(round(float(raw[2]))),
-        )
-    except (TypeError, ValueError):
-        return None
+    return parse_map_view(map_view_json)
 
 
 def render(

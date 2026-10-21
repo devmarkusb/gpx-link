@@ -76,3 +76,13 @@ def test_load_desktop_ad_config_ignores_invalid_urls() -> None:
     )
 
     assert cfg is None
+
+
+def test_load_desktop_ad_config_ignores_malformed_url() -> None:
+    assert load_desktop_ad_config({AD_URL_ENV: "https://[broken"}) is None
+
+
+def test_load_desktop_ad_config_ignores_non_utf8_html_file(tmp_path) -> None:
+    ad_file = tmp_path / "ad.html"
+    ad_file.write_bytes(b"\xff")
+    assert load_desktop_ad_config({AD_HTML_FILE_ENV: str(ad_file)}) is None

@@ -59,7 +59,7 @@ def load_desktop_ad_config(
         if ad_html_file:
             try:
                 ad_html = Path(ad_html_file).expanduser().read_text(encoding="utf-8")
-            except OSError:
+            except (OSError, UnicodeError):
                 ad_html = ""
 
     if not ad_html.strip():
@@ -91,7 +91,10 @@ def _http_url_or_none(value: str) -> str | None:
     url = value.strip()
     if not url:
         return None
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
     return url

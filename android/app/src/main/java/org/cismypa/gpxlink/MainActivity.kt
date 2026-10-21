@@ -3,6 +3,7 @@ package org.cismypa.gpxlink
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.location.Location
@@ -66,7 +67,12 @@ class MainActivity : AppCompatActivity() {
      * callbacks and carries the pan/zoom we embedded (so [lastMapView] can be committed synchronously
      * without waiting for [WebView.evaluateJavascript]).
      */
-    private data class MapWebState(val ticket: Int, val preservedPanZoom: Triple<Double, Double, Int>?)
+    private data class MapWebState(
+        val ticket: Int,
+        val preservedPanZoom: Triple<Double, Double, Int>?,
+        val requestGeneration: Int,
+        val pageUrl: String,
+    )
 
     private data class ProjectFileEntry(
         val path: String,
@@ -89,12 +95,17 @@ class MainActivity : AppCompatActivity() {
     private var interstitialAd: InterstitialAd? = null
     private var interstitialLoading = false
     private var interstitialShowing = false
+    private var adsReady = false
     private var lastNotifiedAdFree: Boolean? = null
     private val importExecutor = Executors.newSingleThreadExecutor()
     private val mapRenderExecutor = Executors.newSingleThreadExecutor()
-    private var importBusy = false
+    private var pendingImports = 0
+    private var projectGeneration = 0
     private var mapBusy = false
     private var locationBusy = false
+    private var locationCancellation: CancellationSignal? = null
+    private var locationListener: LocationListener? = null
+    private var locationManagerForRequest: LocationManager? = null
     /** Monotonic id for GPX Python render passes; bumped on each [reloadMap] start. */
     private var renderRequestGeneration = 0
     /** Monotonic id tied to successful [WebView.loadDataWithBaseURL] map loads for stale-finish guards. */
@@ -119,7 +130,8 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isEmpty()) return@registerForActivityResult
             val uriSnapshot = uris.toList()
-            importBusy = true
+            val generation = projectGeneration
+            pendingImports += 1
             refreshGlobalBusyProgress()
             importExecutor.execute {
                 val imported = mutableListOf<GpxListItem>()
@@ -144,14 +156,21 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 runOnUiThread {
-                    if (isDestroyed) return@runOnUiThread
+                    if (isDestroyed || generation != projectGeneration) {
+                        imported.forEach { deleteManagedImportPath(it.cachePath) }
+                        if (!isDestroyed) {
+                            pendingImports -= 1
+                            refreshGlobalBusyProgress()
+                        }
+                        return@runOnUiThread
+                    }
                     gpxItems.addAll(imported)
                     for (text in errors) {
                         Toast.makeText(this, text, Toast.LENGTH_LONG).show()
                     }
                     adapter.notifyDataSetChanged()
                     persistGpxSelection()
-                    importBusy = false
+                    pendingImports -= 1
                     refreshGlobalBusyProgress()
                     reloadMap()
                 }
@@ -372,12 +391,18 @@ class MainActivity : AppCompatActivity() {
         if (billing.isAdFreeCached()) {
             adBannerContainer.visibility = View.GONE
         }
-        requestAdsConsentThen(this) {
+        billing.start()
+        requestAdsConsentThen(this) { canRequestAds ->
+            if (!canRequestAds) return@requestAdsConsentThen
             applyAdMobDebugTestDeviceConfiguration()
-            MobileAds.initialize(this) {}
-            removeAdsBilling?.start()
-            maybeShowBannerAd()
-            maybeLoadInterstitialAd()
+            MobileAds.initialize(this) {
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    adsReady = true
+                    maybeShowBannerAd()
+                    maybeLoadInterstitialAd()
+                }
+            }
         }
     }
 
@@ -402,6 +427,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeShowBannerAd() {
+        if (!adsReady || isFinishing || isDestroyed) return
         val billing = removeAdsBilling ?: return
         if (billing.isAdFreeCached()) return
         if (mapBannerAdView != null) return
@@ -429,6 +455,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeLoadInterstitialAd() {
+        if (!adsReady || isFinishing || isDestroyed) return
         val billing = removeAdsBilling ?: return
         if (billing.isAdFreeCached()) return
         if (interstitialAd != null || interstitialLoading) return
@@ -673,13 +700,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun promptNewProject() {
         if (gpxItems.isEmpty()) {
+            projectGeneration += 1
             setLastMapView(null)
-            reloadMap()
+            reloadMap(captureCurrentView = false)
             return
         }
         MaterialAlertDialogBuilder(this)
             .setMessage(R.string.project_new_confirm)
             .setPositiveButton(android.R.string.ok) { _, _ ->
+                projectGeneration += 1
                 for (item in gpxItems) {
                     deleteManagedImportPath(item.cachePath)
                 }
@@ -687,7 +716,7 @@ class MainActivity : AppCompatActivity() {
                 adapter.notifyDataSetChanged()
                 persistGpxSelection()
                 setLastMapView(null)
-                reloadMap()
+                reloadMap(captureCurrentView = false)
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
@@ -796,14 +825,17 @@ class MainActivity : AppCompatActivity() {
         val entries = projectFileEntries(files)
         val showPanel = root.optBoolean("show_file_panel", true)
         val mapViewRaw = root.optJSONArray("map_view")?.toString()
-        importBusy = true
+        projectGeneration += 1
+        val generation = projectGeneration
+        pendingImports += 1
         refreshGlobalBusyProgress()
         importExecutor.execute {
             val loaded = mutableListOf<GpxListItem>()
+            val createdImports = mutableListOf<String>()
             var skipped = 0
             for ((index, entry) in entries.withIndex()) {
                 try {
-                    val item = loadProjectEntry(entry, index)
+                    val item = loadProjectEntry(entry, index, createdImports)
                     if (item == null) {
                         skipped++
                     } else {
@@ -814,7 +846,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
+                if (isDestroyed || generation != projectGeneration) {
+                    createdImports.forEach { deleteManagedImportPath(it) }
+                    if (!isDestroyed) {
+                        pendingImports -= 1
+                        refreshGlobalBusyProgress()
+                    }
+                    return@runOnUiThread
+                }
                 val loadedPaths = loaded.mapNotNull { canonicalPathOrNull(it.cachePath) }.toSet()
                 for (item in gpxItems) {
                     if (canonicalPathOrNull(item.cachePath) !in loadedPaths) {
@@ -827,9 +866,9 @@ class MainActivity : AppCompatActivity() {
                 setFilePanelVisible(showPanel)
                 persistGpxSelection()
                 setLastMapView(mapViewRaw?.let { parseJsMapView(it) })
-                importBusy = false
+                pendingImports -= 1
                 refreshGlobalBusyProgress()
-                reloadMap()
+                reloadMap(captureCurrentView = false)
                 if (skipped > 0) {
                     Toast.makeText(this, R.string.project_missing_paths, Toast.LENGTH_LONG).show()
                 }
@@ -884,7 +923,10 @@ class MainActivity : AppCompatActivity() {
     private fun removeGpxItemAt(position: Int) {
         if (position !in gpxItems.indices) return
         val removed = gpxItems.removeAt(position)
-        deleteManagedImportPath(removed.cachePath)
+        val removedPath = canonicalPathOrNull(removed.cachePath)
+        if (gpxItems.none { canonicalPathOrNull(it.cachePath) == removedPath }) {
+            deleteManagedImportPath(removed.cachePath)
+        }
         adapter.notifyItemRemoved(position)
         val rest = gpxItems.size - position
         if (rest > 0) {
@@ -895,6 +937,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        cancelLocationRequest()
         mapBannerAdView?.destroy()
         mapBannerAdView = null
         interstitialAd = null
@@ -908,7 +951,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshGlobalBusyProgress() {
-        val busy = importBusy || mapBusy || locationBusy
+        val busy = pendingImports > 0 || mapBusy || locationBusy
         globalBusyProgress.isVisible = busy
     }
 
@@ -946,20 +989,22 @@ class MainActivity : AppCompatActivity() {
 
         committedMapWebGeneration += 1
         val ticket = committedMapWebGeneration
-        webView.tag = MapWebState(ticket, preservedPanZoom)
+        val pageUrl = "https://cdn.jsdelivr.net/gpx-link-map/$ticket/"
+        webView.tag = MapWebState(ticket, preservedPanZoom, rq, pageUrl)
         webView.loadDataWithBaseURL(
-            "https://cdn.jsdelivr.net/",
+            pageUrl,
             html,
             "text/html",
             "UTF-8",
-            null,
+            pageUrl,
         )
     }
 
-    private fun onMapWebPageFinished(webViewFinished: WebView) {
+    private fun onMapWebPageFinished(webViewFinished: WebView, url: String?) {
         if (webViewFinished !== webView) return
         val state = webViewFinished.tag as? MapWebState ?: return
         if (state.ticket != committedMapWebGeneration) return
+        if (state.requestGeneration != renderRequestGeneration || state.pageUrl != url) return
         if (!mapBusy) return
         mapBusy = false
         refreshGlobalBusyProgress()
@@ -973,12 +1018,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun captureMapViewIfCurrent(wv: WebView, ticket: Int) {
         wv.post {
-            if ((wv.tag as? MapWebState)?.ticket != ticket) return@post
+            val state = wv.tag as? MapWebState ?: return@post
+            if (state.ticket != ticket || state.requestGeneration != renderRequestGeneration) return@post
             wv.evaluateJavascript(
                 "(function(){try{if(typeof map==='undefined'||!map.getCenter)return null;" +
                     "var c=map.getCenter();return[c.lat,c.lng,map.getZoom()];}catch(e){return null;}})()",
             ) { raw ->
                 if ((wv.tag as? MapWebState)?.ticket != ticket) return@evaluateJavascript
+                if (state.requestGeneration != renderRequestGeneration) return@evaluateJavascript
                 parseJsMapView(raw)?.let { setLastMapView(it) }
             }
         }
@@ -989,7 +1036,10 @@ class MainActivity : AppCompatActivity() {
         return try {
             val arr = JSONArray(raw)
             if (arr.length() < 3) return null
-            Triple(arr.getDouble(0), arr.getDouble(1), arr.getInt(2))
+            val lat = arr.getDouble(0)
+            val lon = arr.getDouble(1)
+            if (!lat.isFinite() || !lon.isFinite() || !arr.getDouble(2).isFinite()) return null
+            Triple(lat, lon, arr.getInt(2))
         } catch (_: Exception) {
             null
         }
@@ -1086,8 +1136,19 @@ class MainActivity : AppCompatActivity() {
                         request: WebResourceRequest?,
                     ): Boolean {
                         val url = request?.url?.toString() ?: return false
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        try {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(this@MainActivity, R.string.no_link_handler, Toast.LENGTH_LONG).show()
+                        } finally {
+                            ContextCompat.getMainExecutor(this@MainActivity).execute { popup.destroy() }
+                        }
                         return true
+                    }
+                }
+                popup.webChromeClient = object : WebChromeClient() {
+                    override fun onCloseWindow(window: WebView?) {
+                        window?.destroy()
                     }
                 }
                 transport.webView = popup
@@ -1100,7 +1161,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     if (view !== wv) return
-                    onMapWebPageFinished(wv)
+                    onMapWebPageFinished(wv, url)
                 }
             }
     }
@@ -1141,6 +1202,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onMapWebTitle(title: String?) {
+        val state = webView.tag as? MapWebState ?: return
+        if (mapBusy || state.requestGeneration != renderRequestGeneration) return
         if (title == null || !title.startsWith(MAP_VIEW_TITLE_PREFIX)) return
         parseJsMapView(title.removePrefix(MAP_VIEW_TITLE_PREFIX))?.let { setLastMapView(it) }
     }
@@ -1177,12 +1240,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkedPaths(): List<String> = gpxItems.filter { it.checked }.map { it.cachePath }
 
-    private fun reloadMap() {
+    private fun reloadMap(captureCurrentView: Boolean = true) {
         renderRequestGeneration += 1
         val rq = renderRequestGeneration
         mapBusy = true
         refreshGlobalBusyProgress()
-        captureMapViewForReload(rq)
+        if (captureCurrentView) {
+            captureMapViewForReload(rq)
+        } else {
+            renderMapForCurrentSelection(rq, lastMapView)
+        }
     }
 
     private fun captureMapViewForReload(rq: Int) {
@@ -1254,10 +1321,15 @@ class MainActivity : AppCompatActivity() {
         val name = queryDisplayName(uri) ?: "import_$index.gpx"
         val safe = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
         val dir = File(filesDir, "gpx_imports").apply { mkdirs() }
-        val out = File(dir, "${System.currentTimeMillis()}_${index}_$safe")
-        contentResolver.openInputStream(uri)?.use { input ->
-            out.outputStream().use { output -> input.copyTo(output) }
-        } ?: error("Cannot open document")
+        val out = File.createTempFile("import_${index}_", "_${safe.take(80)}", dir)
+        try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                out.outputStream().use { output -> input.copyTo(output) }
+            } ?: error("Cannot open document")
+        } catch (e: Exception) {
+            out.delete()
+            throw e
+        }
         return out.absolutePath
     }
 
@@ -1296,7 +1368,11 @@ class MainActivity : AppCompatActivity() {
         return entries
     }
 
-    private fun loadProjectEntry(entry: ProjectFileEntry, index: Int): GpxListItem? {
+    private fun loadProjectEntry(
+        entry: ProjectFileEntry,
+        index: Int,
+        createdImports: MutableList<String>,
+    ): GpxListItem? {
         if (entry.path.isNotBlank()) {
             val f = File(entry.path)
             if (f.isFile()) {
@@ -1312,6 +1388,7 @@ class MainActivity : AppCompatActivity() {
         val uri = Uri.parse(uriRaw)
         persistReadableDocumentUri(uri)
         val localPath = copyUriToLocalImport(uri, index)
+        createdImports.add(localPath)
         val label = entry.label.ifBlank { queryDisplayName(uri) ?: File(localPath).name }
         return GpxListItem(
             displayName = label,
@@ -1398,17 +1475,29 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun centerMapOnCurrentLocation() {
+        cancelLocationRequest()
+        refreshGlobalBusyProgress()
         val lm = getSystemService(LOCATION_SERVICE) as LocationManager
+        val precise = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
         val candidates =
             listOf(
                 LocationManager.GPS_PROVIDER,
                 LocationManager.NETWORK_PROVIDER,
                 LocationManager.PASSIVE_PROVIDER,
-            )
+            ).filter {
+                precise || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || it == LocationManager.NETWORK_PROVIDER
+            }
         var newest: Location? = null
         for (p in candidates) {
-            if (!lm.isProviderEnabled(p)) continue
-            val loc = lm.getLastKnownLocation(p) ?: continue
+            val loc = try {
+                if (!lm.isProviderEnabled(p)) continue
+                lm.getLastKnownLocation(p) ?: continue
+            } catch (_: SecurityException) {
+                continue
+            } catch (_: IllegalArgumentException) {
+                continue
+            }
             if (newest == null || loc.elapsedRealtimeNanos > newest.elapsedRealtimeNanos) {
                 newest = loc
             }
@@ -1418,8 +1507,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val activeProvider =
-            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
-                .find { lm.isProviderEnabled(it) }
+            candidates.filter { it != LocationManager.PASSIVE_PROVIDER }
+                .find {
+                    try {
+                        lm.isProviderEnabled(it)
+                    } catch (_: SecurityException) {
+                        false
+                    } catch (_: IllegalArgumentException) {
+                        false
+                    }
+                }
         if (activeProvider == null) {
             Toast.makeText(this, R.string.location_provider_disabled, Toast.LENGTH_LONG).show()
             return
@@ -1429,15 +1526,21 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun requestSingleFreshLocation(lm: LocationManager, provider: String) {
+        cancelLocationRequest()
+        locationManagerForRequest = lm
         locationBusy = true
         refreshGlobalBusyProgress()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val cancellation = CancellationSignal()
+                locationCancellation = cancellation
                 lm.getCurrentLocation(
                     provider,
-                    CancellationSignal(),
+                    cancellation,
                     ContextCompat.getMainExecutor(this),
                 ) { loc ->
+                    if (locationCancellation !== cancellation) return@getCurrentLocation
+                    cancelLocationRequest()
                     locationBusy = false
                     refreshGlobalBusyProgress()
                     if (loc != null) {
@@ -1447,39 +1550,59 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             } else {
+                val listener = object : LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        if (locationListener !== this) return
+                        cancelLocationRequest()
+                        locationBusy = false
+                        refreshGlobalBusyProgress()
+                        injectUserLocationOnMap(location.latitude, location.longitude)
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+
+                    override fun onProviderEnabled(provider: String) {}
+
+                    override fun onProviderDisabled(provider: String) {
+                        if (locationListener !== this) return
+                        cancelLocationRequest()
+                        locationBusy = false
+                        refreshGlobalBusyProgress()
+                        Toast.makeText(
+                            this@MainActivity,
+                            R.string.location_provider_disabled,
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+                locationListener = listener
                 @Suppress("DEPRECATION")
-                lm.requestSingleUpdate(
-                    provider,
-                    object : LocationListener {
-                        override fun onLocationChanged(location: Location) {
-                            locationBusy = false
-                            refreshGlobalBusyProgress()
-                            injectUserLocationOnMap(location.latitude, location.longitude)
-                        }
-
-                        @Deprecated("Deprecated in Java")
-                        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-
-                        override fun onProviderEnabled(provider: String) {}
-
-                        override fun onProviderDisabled(provider: String) {
-                            locationBusy = false
-                            refreshGlobalBusyProgress()
-                            Toast.makeText(
-                                this@MainActivity,
-                                R.string.location_provider_disabled,
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        }
-                    },
-                    Looper.getMainLooper(),
-                )
+                lm.requestSingleUpdate(provider, listener, Looper.getMainLooper())
             }
         } catch (_: SecurityException) {
+            cancelLocationRequest()
             locationBusy = false
             refreshGlobalBusyProgress()
             Toast.makeText(this, R.string.location_error, Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun cancelLocationRequest() {
+        val cancellation = locationCancellation
+        locationCancellation = null
+        cancellation?.cancel()
+        val listener = locationListener
+        locationListener = null
+        if (listener != null) {
+            try {
+                locationManagerForRequest?.removeUpdates(listener)
+            } catch (_: SecurityException) {
+                // Permission can be revoked while a location request is pending.
+            }
+        }
+        locationManagerForRequest = null
+        locationBusy = false
     }
 
     private fun injectUserLocationOnMap(lat: Double, lng: Double) {

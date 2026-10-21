@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from gpxpy.gpx import GPXException
 
 from gpx_link.parser import (
     load_map_features_from_paths,
@@ -71,3 +72,34 @@ def test_load_route_as_geo_path(tmp_path: Path) -> None:
     assert paths[0].kind == "route"
     assert paths[0].name == "Path"
     assert paths[0].points[1] == (46.02, -123.03)
+
+
+@pytest.mark.parametrize(
+    "feature",
+    [
+        "<wpt {coords}/>",
+        "<rte><rtept {coords}/></rte>",
+        "<trk><trkseg><trkpt {coords}/></trkseg></trk>",
+    ],
+)
+@pytest.mark.parametrize(
+    "coords",
+    [
+        'lat="nan" lon="2"',
+        'lat="1" lon="inf"',
+        'lat="-91" lon="2"',
+        'lat="1" lon="181"',
+    ],
+)
+def test_invalid_coordinates_are_rejected(
+    tmp_path: Path,
+    feature: str,
+    coords: str,
+) -> None:
+    path = tmp_path / "invalid.gpx"
+    path.write_text(
+        '<gpx version="1.1" creator="test">' + feature.format(coords=coords) + "</gpx>",
+        encoding="utf-8",
+    )
+    with pytest.raises(GPXException, match="coordinate"):
+        load_map_features_from_paths([path])
