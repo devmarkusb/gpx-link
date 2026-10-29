@@ -4,7 +4,7 @@ Portable project rules for AI coding agents. **This file is the canonical source
 
 ## 1. Project overview
 
-**gpx-link** is a Python **3.10+** package (`gpx-link` on PyPI): parse GPX files, build an OSM/Leaflet HTML map, and open Google Maps URLs for waypoints. Layout:
+**gpx-link** is a Python **3.11+** package (`gpx-link` on PyPI): parse GPX files, build an OSM/Leaflet HTML map, and open Google Maps URLs for waypoints. Layout:
 
 - **`src/gpx_link/`** — library, CLI (`gpx_link.cli`), optional Qt GUI (`gpx_link.gui`) behind the **`gui`** extra.
 - **`tests/`** — pytest suite for core behavior (CLI, parser, bounds, maps URLs, HTML map, simplify).
@@ -32,7 +32,7 @@ From the repo root (after **[uv](https://docs.astral.sh/uv/)** is installed):
 | Unit tests + coverage (matches CI) | `uv run pytest` |
 | Dependency vulnerability audit (CI) | `uv audit --preview-features audit --locked` |
 
-CI also runs the same suite and dependency audit on Python **3.10** and **3.13** (`.github/workflows/ci.yml`).
+CI also runs the same suite and dependency audit on Python **3.11** and **3.13** (`.github/workflows/ci.yml`).
 
 ## 4. Formatting and linting
 
@@ -59,7 +59,7 @@ Commit messages on PRs are validated with **conventional-pre-commit** (see `.pre
 
 ## 6. Coding conventions
 
-- **Ruff**: `line-length` 88, `target-version` py310, lint rules **E, F, I, UP, B** (`pyproject.toml`).
+- **Ruff**: `line-length` 88, `target-version` py311, lint rules **E, F, I, UP, B** (`pyproject.toml`).
 - **Imports / style**: follow existing modules; avoid drive-by refactors unrelated to the task.
 - **Android + Python**: changing the published Python API or packaged files may require Gradle sync / Chaquopy packaging awareness — read `android/app/build.gradle.kts` when touching cross-layer behavior.
 - **Versioning**: `project.version` in **`pyproject.toml`** drives package version and Android `versionName` / `versionCode` expectations for releases.

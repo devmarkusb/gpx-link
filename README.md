@@ -12,7 +12,7 @@ The project keeps a **small, tested core library** and **CLI** separate from the
 
 ## Requirements
 
-- Python **3.10+**
+- Python **3.11+**
 - CLI and library: [`gpxpy`](https://github.com/tkrajina/gpxpy)
 - GUI (optional): [PySide6](https://wiki.qt.io/Qt_for_Python) with **Qt WebEngine** (for the embedded map)
 

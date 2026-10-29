@@ -2,10 +2,9 @@
 name = "gpx-link"
 version = "1.29.0"
 description = "View GPX waypoints on OpenStreetMap and open locations in Google Maps"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -43,7 +42,7 @@ dev = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py311"
 src = ["src"]
 
 [tool.ruff.lint]
