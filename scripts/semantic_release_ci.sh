@@ -66,8 +66,10 @@ if pr_state="$(gh pr view "$branch" --json state --jq .state 2>/dev/null)" &&
   fi
 fi
 
-uv run python -m semantic_release version --no-push --no-tag --no-vcs-release
-# That command records released=true before the pull request exists.
+# --no-tag leaves commit_sha unset, and semantic-release then aborts while
+# writing Actions output because it still marks the run as released. Hide
+# GITHUB_OUTPUT for this invocation; the real release output is written later.
+GITHUB_OUTPUT="" uv run python -m semantic_release version --no-push --no-tag --no-vcs-release
 echo "released=false" >>"$GITHUB_OUTPUT"
 
 if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
