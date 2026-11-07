@@ -1,6 +1,6 @@
 [project]
 name = "gpx-link"
-version = "1.29.0"
+version = "1.30.0"
 description = "View GPX waypoints on OpenStreetMap and open locations in Google Maps"
 requires-python = ">=3.11"
 classifiers = [
