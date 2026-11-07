@@ -69,3 +69,6 @@ skip = ".venv,uv.lock,android/Gemfile.lock"
 version_toml = ["pyproject.toml:project.version"]
 assets = ["uv.lock"]
 build_command = "uv lock --upgrade-package $PACKAGE_NAME && uv build"
+# Conventional so the release pull request passes the commit-message check.
+# python-semantic-release excludes commits that match this message from the changelog.
+commit_message = "chore(release): {version}"

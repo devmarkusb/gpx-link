@@ -12,8 +12,11 @@ jobs:
   version:
     name: Semantic release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
+      actions: write
       contents: write
+      pull-requests: write
     outputs:
       released: ${{ steps.sr.outputs.released }}
       release_tag: ${{ steps.release_tag.outputs.tag }}
@@ -39,7 +42,7 @@ jobs:
         id: sr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run python -m semantic_release version
+        run: bash scripts/semantic_release_ci.sh
 
       # Pushes made with GITHUB_TOKEN do not fire other workflows' `on: push` (e.g. tag pushes).
       # Resolve the new tag here and dispatch Android Play explicitly (below).

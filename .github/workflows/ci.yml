@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  # Release opens a version-bump PR with GITHUB_TOKEN, which does not start
+  # pull_request workflows. The release job dispatches this workflow instead.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -56,6 +59,22 @@ jobs:
           git log -1 --pretty=%B "${{ github.event.after }}" > /tmp/commit-msg.txt
           uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
             --commit-msg-filename /tmp/commit-msg.txt
+
+      - name: Validate commit messages (workflow dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          range=$(git rev-list --reverse origin/main..HEAD || true)
+          if [ -z "$range" ]; then
+            range=$(git rev-parse HEAD)
+          fi
+          while read -r sha; do
+            [ -n "$sha" ] || continue
+            git log -1 --pretty=%B "$sha" > /tmp/commit-msg.txt
+            uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
+              --commit-msg-filename /tmp/commit-msg.txt
+          done <<< "$range"
 
   build:
     runs-on: ubuntu-latest
