@@ -12,20 +12,19 @@ jobs:
   version:
     name: Semantic release
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     permissions:
-      actions: write
       contents: write
-      pull-requests: write
     outputs:
       released: ${{ steps.sr.outputs.released }}
       release_tag: ${{ steps.release_tag.outputs.tag }}
     steps:
+      # The Actions app cannot bypass a personal repository's ruleset.
+      # This deploy key can, so the version commit and tag are pushed to main.
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          persist-credentials: true
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - name: Setup Python
         uses: actions/setup-python@v7
@@ -42,10 +41,8 @@ jobs:
         id: sr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/semantic_release_ci.sh
+        run: uv run python -m semantic_release version
 
-      # Pushes made with GITHUB_TOKEN do not fire other workflows' `on: push` (e.g. tag pushes).
-      # Resolve the new tag here and dispatch Android Play explicitly (below).
       - name: Resolve release tag
         id: release_tag
         if: steps.sr.outputs.released == 'true'
@@ -57,24 +54,6 @@ jobs:
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-  android-play:
-    name: Trigger Android Play release
-    needs: version
-    if: needs.version.outputs.released == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Dispatch Android Play workflow
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run android-play.yml \
-            --repo "${{ github.repository }}" \
-            --ref "${{ needs.version.outputs.release_tag }}" \
-            -f track=internal \
-            -f upload_store_listing=false
 
   publish:
     name: Publish to PyPI

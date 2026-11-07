@@ -102,7 +102,7 @@ On macOS, prefer **Ruby 3.3+** if you run **Fastlane** locally (`bundle install`
 
 ### CI: `.github/workflows/android-play.yml`
 
-Runs on **push** of a **`v*`** tag, on **manual `workflow_dispatch`**, or when **`.github/workflows/release.yml`** dispatches it after a successful **python-semantic-release** run on **`main`**. (Tag pushes created with the default **`GITHUB_TOKEN`** do not start other workflows — the Release workflow calls **`gh workflow run`** so Play still runs automatically after a version bump.)
+Runs on **push** of a **`v*`** tag or on **manual `workflow_dispatch`**. The Release workflow pushes that tag with a deploy key, so the tag push starts this workflow.
 
 **Required repository secrets** for a signed release build:
 
