@@ -166,6 +166,9 @@ class MainActivity : AppCompatActivity() {
                         return@runOnUiThread
                     }
                     addImportedGpxItems(imported)
+                    if (imported.isNotEmpty()) {
+                        markGpxImportCompleted()
+                    }
                     for (text in errors) {
                         Toast.makeText(this, text, Toast.LENGTH_LONG).show()
                     }
@@ -631,7 +634,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun launchGpxImport() {
-        showInterstitialThen {
+        val launchImport = {
             openGpxLauncher.launch(
                 arrayOf(
                     "application/gpx+xml",
@@ -642,6 +645,23 @@ class MainActivity : AppCompatActivity() {
                 ),
             )
         }
+        // Never gate a first import behind a full-screen ad: on fresh installs (and
+        // Play reviews) the ad would cover the app before any content is shown.
+        if (hasImportedGpxBefore()) {
+            showInterstitialThen(launchImport)
+        } else {
+            launchImport()
+        }
+    }
+
+    private fun hasImportedGpxBefore(): Boolean =
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean(KEY_HAS_IMPORTED_GPX, false)
+
+    private fun markGpxImportCompleted() {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_HAS_IMPORTED_GPX, true)
+            .apply()
     }
 
     private fun showProjectMenu() {
@@ -1650,6 +1670,7 @@ class MainActivity : AppCompatActivity() {
         const val KEY_GPX_ITEMS = "gpx_selection_v1"
         const val KEY_MARKER_LABELS = "marker_labels_mode"
         const val KEY_MAP_VIEW = "last_map_view_v1"
+        const val KEY_HAS_IMPORTED_GPX = "has_imported_gpx_v1"
         const val MAP_VIEW_TITLE_PREFIX = "gpx-link-map-view:"
         const val PROJECT_FORMAT = "gpx-link-project"
         const val PROJECT_VERSION = 1
